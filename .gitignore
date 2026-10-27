@@ -1,0 +1,8 @@
+.env
+private/
+scratch/
+site-dist/
+node_modules/
+.claude/
+*.log
+.DS_Store

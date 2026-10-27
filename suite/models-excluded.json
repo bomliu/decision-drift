@@ -1,0 +1,4 @@
+{
+  "respan/span-01": "Accepts only Noul questions with plain-string instructions and criteria; cannot answer Choice or Score questions (HTTP 400 on 2026-10-20).",
+  "respan/span-01-lite": "Same restriction as respan/span-01."
+}

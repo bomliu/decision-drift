@@ -1,0 +1,87 @@
+{
+  "suite": "decision-drift core",
+  "version": "v1",
+  "frozen_at": "2026-10-20T02:53:12.990Z",
+  "rules": [
+    "Items are immutable; fixes retire an item and add a new one.",
+    "Questions are never tuned against model results.",
+    "Headline metrics use the v1 cohort."
+  ],
+  "splits": {
+    "public": {
+      "file": "suite/core-v1.public.jsonl",
+      "states": 279,
+      "questions": 1030,
+      "gold_questions": 772,
+      "sha256": "5c7c19bf96e26c4a104125af90e733e7aec4de1be33bbfb90ac97699e3503b04"
+    },
+    "private": {
+      "file": "(withheld)",
+      "states": 119,
+      "questions": 442,
+      "gold_questions": 313,
+      "sha256": "825d6d8e288d1770c02982028b821cc2ba833d413f8c6f8deb42602994aceed6"
+    }
+  },
+  "coverage": {
+    "family": {
+      "banking77": 65,
+      "claim": 30,
+      "clinc": 50,
+      "entity": 20,
+      "guardrail": 45,
+      "logs": 12,
+      "rag": 35,
+      "review": 40,
+      "support": 50,
+      "tool": 33,
+      "value": 18
+    },
+    "language": {
+      "en": 336,
+      "es": 20,
+      "zh": 23,
+      "ja": 19
+    },
+    "difficulty": {
+      "clear": 177,
+      "boundary": 160,
+      "edge": 61
+    },
+    "shape": {
+      "short": 250,
+      "json": 94,
+      "chat": 9,
+      "typos": 7,
+      "long": 13,
+      "email": 7,
+      "document": 18
+    }
+  },
+  "variants": {
+    "paraphrase_states": 50,
+    "noise_duplicate_states": 100,
+    "option_shuffle": "every choice question"
+  },
+  "labeling": {
+    "reference": "author label (authored items), dataset label (Banking77, CLINC150), generator truth (synthetic logs)",
+    "llm_labelers": [
+      "openai/gpt-6.1-sol",
+      "google/gemini-4-argon"
+    ],
+    "gold_rule": "reference and both LLM labelers agree",
+    "stats": {
+      "questions": 1796,
+      "gold": 1330,
+      "disagree": 234,
+      "noRef": 232
+    }
+  },
+  "sources": {
+    "banking77": "PolyAI, CC BY 4.0, https://github.com/PolyAI-LDN/task-specific-datasets",
+    "clinc150": "clinc/clinc_oos (plus), CC BY 3.0",
+    "authored": "CC0",
+    "synthetic_logs": "CC0"
+  },
+  "retired": []
+}
