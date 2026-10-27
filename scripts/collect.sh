@@ -6,13 +6,13 @@ set -eu
 DATA="${RAILWAY_VOLUME_MOUNT_PATH:-/data}"
 PUB="$DATA/decision-drift"
 PRIV="$PUB/private"
-DATE="$(date -u +%Y-%m-%d)"
+DATE="${RUN_DATE:-$(date -u +%Y-%m-%d)}"
 : "${GITHUB_TOKEN:?missing}" "${OPENROUTER_API_KEY:?missing}"
 # The token never appears in a remote URL or .git/config; git asks for it through GIT_ASKPASS.
 printf '#!/bin/sh\necho "$GITHUB_TOKEN"\n' > /tmp/askpass && chmod 700 /tmp/askpass
 export GIT_ASKPASS=/tmp/askpass GIT_TERMINAL_PROMPT=0
-REMOTE_PUB="https://x-access-token@github.com/bomliu/decision-drift.git"
-REMOTE_PRIV="https://x-access-token@github.com/bomliu/decision-drift-private.git"
+REMOTE_PUB="${REMOTE_PUB:-https://x-access-token@github.com/bomliu/decision-drift.git}"
+REMOTE_PRIV="${REMOTE_PRIV:-https://x-access-token@github.com/bomliu/decision-drift-private.git}"
 export GIT_AUTHOR_NAME=bomliu GIT_COMMITTER_NAME=bomliu
 export GIT_AUTHOR_EMAIL=1945172+bomliu@users.noreply.github.com GIT_COMMITTER_EMAIL=1945172+bomliu@users.noreply.github.com
 
@@ -29,7 +29,12 @@ sync "$PUB" "$REMOTE_PUB"
 sync "$PRIV" "$REMOTE_PRIV"
 cd "$PUB"
 STATUS=ok
-scripts/daily.sh daily || STATUS=failed
+# Idempotent: a retry on the same day only pushes what is already collected.
+if [ -d "results/$DATE/daily" ] || [ -d "private/results/$DATE/daily" ]; then
+  echo "results for $DATE already exist; skipping collection"
+else
+  RUN_DATE="$DATE" scripts/daily.sh daily || STATUS=failed
+fi
 node src/compact.ts "results/$DATE" "private/results/$DATE" || true
 node src/status.ts --date "$DATE" --run daily --status "$STATUS" || true
 
