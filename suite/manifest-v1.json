@@ -5,22 +5,23 @@
   "rules": [
     "Items are immutable; fixes retire an item and add a new one.",
     "Questions are never tuned against model results.",
-    "Headline metrics use the v1 cohort."
+    "Headline metrics use the v1 cohort.",
+    "Requests are immutable. Reference labels can be corrected after human review; corrections are logged here and never change what is sent to models."
   ],
   "splits": {
     "public": {
       "file": "suite/core-v1.public.jsonl",
       "states": 279,
       "questions": 1030,
-      "gold_questions": 772,
-      "sha256": "5c7c19bf96e26c4a104125af90e733e7aec4de1be33bbfb90ac97699e3503b04"
+      "gold_questions": 775,
+      "sha256": "425a2436b542485fe5433dae817ef96292b0ccc3067716ad2689d1b525973579"
     },
     "private": {
       "file": "(withheld)",
       "states": 119,
       "questions": 442,
-      "gold_questions": 313,
-      "sha256": "825d6d8e288d1770c02982028b821cc2ba833d413f8c6f8deb42602994aceed6"
+      "gold_questions": 325,
+      "sha256": "49fd719662b33ffbcd4b5419f62c2b6e683daac697c82d4797aa09a0cd223a59"
     }
   },
   "coverage": {
@@ -44,8 +45,8 @@
       "ja": 19
     },
     "difficulty": {
-      "clear": 177,
-      "boundary": 160,
+      "clear": 176,
+      "boundary": 161,
       "edge": 61
     },
     "shape": {
@@ -83,5 +84,129 @@
     "authored": "CC0",
     "synthetic_logs": "CC0"
   },
-  "retired": []
+  "retired": [],
+  "label_corrections": [
+    {
+      "version": "v1.1-labels",
+      "reviewed_at": "2026-10-28",
+      "reviewer": "human spot-check of 50 items (private/spot-check-notes.json)",
+      "changes": [
+        {
+          "item": "banking77-0364",
+          "question": "card_related",
+          "gold_now": true
+        },
+        {
+          "item": "banking77-0395",
+          "question": "card_related",
+          "gold_now": true
+        },
+        {
+          "item": "clinc-0448",
+          "question": "intent",
+          "gold_now": false
+        },
+        {
+          "item": "entity-0301",
+          "question": "same",
+          "gold_now": false
+        },
+        {
+          "item": "entity-0301",
+          "question": "similarity",
+          "gold_now": false
+        },
+        {
+          "item": "entity-0301",
+          "question": "conflict",
+          "gold_now": false
+        },
+        {
+          "item": "guardrail-0110",
+          "question": "severity",
+          "gold_now": true
+        },
+        {
+          "item": "support-0048",
+          "question": "frustration",
+          "gold_now": true
+        },
+        {
+          "item": "tool-0279",
+          "question": "needs_clarification",
+          "gold_now": true
+        },
+        {
+          "item": "banking77-0349",
+          "question": "card_related",
+          "gold_now": true
+        },
+        {
+          "item": "banking77-0368",
+          "question": "intent",
+          "gold_now": false
+        },
+        {
+          "item": "banking77-0368",
+          "question": "card_related",
+          "gold_now": true
+        },
+        {
+          "item": "clinc-0412",
+          "question": "intent",
+          "gold_now": true
+        },
+        {
+          "item": "entity-0317",
+          "question": "similarity",
+          "gold_now": true
+        },
+        {
+          "item": "entity-0320",
+          "question": "conflict",
+          "gold_now": true
+        },
+        {
+          "item": "guardrail-0104",
+          "question": "harmful",
+          "gold_now": true
+        },
+        {
+          "item": "guardrail-0104",
+          "question": "severity",
+          "gold_now": true
+        },
+        {
+          "item": "guardrail-0106",
+          "question": "severity",
+          "gold_now": true
+        },
+        {
+          "item": "rag-0201",
+          "question": "relevant",
+          "gold_now": false
+        },
+        {
+          "item": "rag-0201",
+          "question": "answers",
+          "gold_now": true
+        },
+        {
+          "item": "rag-0201",
+          "question": "relevance",
+          "gold_now": true
+        },
+        {
+          "item": "support-0050",
+          "question": "frustration",
+          "gold_now": true
+        },
+        {
+          "item": "support-0054",
+          "question": "frustration",
+          "gold_now": true
+        }
+      ]
+    }
+  ]
 }

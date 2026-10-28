@@ -269,14 +269,14 @@ write('method/index.html', page({ path: '/method/', title: 'Method', description
 <h1>Method</h1>
 <p class="lede">Decision models answer typed questions (yes/no, pick one, score on a scale) with probabilities instead of text. We check whether those answers stay put.</p>
 <h2>The suite</h2>
-<p>Version 1 has ${manifest.splits.public.states + manifest.splits.private.states} states and ${manifest.splits.public.questions + manifest.splits.private.questions} questions across task families (${covList(cov.family)}) and languages (${covList(cov.language)}). Every model gets the identical request. Questions follow the published System One conventions and are never tuned against results. Items are immutable: a flawed item is retired and replaced, never edited, and the headline numbers always use the original cohort.</p>
+<p>Version 1 has ${manifest.splits.public.states + manifest.splits.private.states} states and ${manifest.splits.public.questions + manifest.splits.private.questions} questions across task families (${covList(cov.family)}) and languages (${covList(cov.language)}). Every model gets the identical request. Questions follow the published System One conventions and are never tuned against results. Requests are immutable: a flawed item is retired and replaced, never edited, and the headline numbers always use the original cohort. Reference labels can be corrected after human review; corrections are logged in the manifest and never change what is sent to models.</p>
 <p>About 70% of the suite is public. The other 30% is private so that no vendor can train on the whole suite; we publish only its hash and aggregate scores. Public hash <code>${manifest.splits.public.sha256.slice(0, 16)}</code>, private hash <code>${manifest.splits.private.sha256.slice(0, 16)}</code>.</p>
 <h2>What we measure</h2>
 <ul>
 <li><strong>Changed since Oct 20:</strong> the share of top answers that differ from the same model's first run, counting only byte-identical requests.</li>
 <li><strong>Noise:</strong> the share that differs when 100 states are sent again minutes later. Drift only counts when its interval sits above this.</li>
 <li><strong>Option shuffle and paraphrase:</strong> the share that changes when choice options are reordered, or when the instructions are reworded with the same meaning.</li>
-<li><strong>Gold accuracy and calibration:</strong> on questions where the reference label and two independent LLM labelers (GPT-6.1 Sol, Gemini 4 Argon) all agree. These are the clearer cases, so accuracy runs high and is not a ranking.</li>
+<li><strong>Gold accuracy and calibration:</strong> on questions where the reference label and two independent LLM labelers (GPT-6.1 Sol, Gemini 4 Argon) all agree. A person reviewed a stratified sample of 50 items before launch and corrected 23 reference labels. These are the clearer cases, so accuracy runs high and is not a ranking.</li>
 <li><strong>Latency, errors and cost</strong> as seen by our runner, network included.</li>
 </ul>
 <h2>Schedule and limits</h2>
