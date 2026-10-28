@@ -3,7 +3,7 @@
   "date": "2026-10-28",
   "run": "daily",
   "status": "ok",
-  "finished_at": "2026-10-28T04:42:46.476Z"
+  "finished_at": "2026-10-28T10:19:02.328Z"
  },
  "schedule": "daily at 10:17 UTC",
  "models": 27,
@@ -11,5 +11,5 @@
  "errors": 9,
  "models_with_errors": [],
  "run_cost_usd": 0.7238729199999997,
- "key_usage_usd": 4.379213636
+ "key_usage_usd": 4.379958686
 }
