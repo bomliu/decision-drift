@@ -81,8 +81,8 @@
   "sources": {
     "banking77": "PolyAI, CC BY 4.0, https://github.com/PolyAI-LDN/task-specific-datasets",
     "clinc150": "clinc/clinc_oos (plus), CC BY 3.0",
-    "authored": "CC0",
-    "synthetic_logs": "CC0"
+    "authored": "CC BY 4.0",
+    "synthetic_logs": "CC BY 4.0"
   },
   "retired": [],
   "label_corrections": [

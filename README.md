@@ -38,4 +38,5 @@ The runner stops when the key's total spend reaches `BUDGET_STOP` (default $22).
 ## Sources and licenses
 - Banking77 test set: PolyAI, CC BY 4.0
 - CLINC150 ("plus" test set): CC BY 3.0
-- Authored items and synthetic logs: CC0
+- Authored items, synthetic logs, results and reports: CC BY 4.0
+- Code: MIT (see `LICENSE`; data terms in `DATA-LICENSE.md`)

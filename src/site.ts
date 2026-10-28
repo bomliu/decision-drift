@@ -105,6 +105,9 @@ function trace(m: string, w = 220, h = 44, withAxis = false, sharedMax?: number)
 }
 
 // ---------- layout ----------
+// Cookieless page analytics (self-hosted Umami); only counts visits on the production domain.
+const UMAMI = process.env.UMAMI_SRC && process.env.UMAMI_WEBSITE_ID
+  ? `<script defer src="${process.env.UMAMI_SRC}" data-website-id="${process.env.UMAMI_WEBSITE_ID}" data-domains="decisiondrift.dev"></script>` : '';
 const CSS = `
 :root{--paper:#F7F9FA;--grid:#E6ECF0;--ink:#1B2430;--muted:#55636F;--trace:#2457C5;--warn:#B26A00;--panel:#FFFFFF;--focus:#2457C5;color-scheme:light}
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--paper:#121A23;--grid:#263241;--ink:#E4EAF0;--muted:#9AA8B5;--trace:#5A82E0;--warn:#C0843A;--panel:#17212C;--focus:#7FA6FF;color-scheme:dark}}
@@ -178,10 +181,10 @@ function page(p: { path: string; title: string; description: string; body: strin
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="icon" href="data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><polyline points="1,11 5,11 7,4 9,13 11,8 15,8" fill="none" stroke="#2457C5" stroke-width="2"/></svg>')}">
-<style>${CSS}</style></head><body><div class="wrap">
+<style>${CSS}</style>${UMAMI}</head><body><div class="wrap">
 <header class="site"><a class="mark" href="/">decision<span>drift</span></a><nav class="site" aria-label="Main">${NAV.map(([h, l]) => `<a href="${h}"${(h === '/' ? p.path === '/' : p.path.startsWith(h)) ? ' aria-current="page"' : ''}>${l}</a>`).join('')}</nav></header>
 <main id="main">${p.body}</main>
-<footer class="site">An independent tracker; not affiliated with any model vendor. Runs daily at 10:17 UTC against every compatible decision model on OpenRouter. Code, public suite and raw results: <a href="${REPO}">${REPO.replace('https://', '')}</a>. Suite items CC0 except Banking77 (CC BY 4.0) and CLINC150 (CC BY 3.0).</footer>
+<footer class="site">An independent tracker; not affiliated with any model vendor. Runs daily at 10:17 UTC against every compatible decision model on OpenRouter. Code, public suite and raw results: <a href="${REPO}">${REPO.replace('https://', '')}</a>. Code MIT; data CC BY 4.0, except CLINC150-derived items (CC BY 3.0).</footer>
 </div><div id="tip" role="tooltip"></div><script>${TIP_JS}</script></body></html>`;
 }
 function write(rel: string, content: string) {
@@ -289,7 +292,7 @@ fs.writeFileSync(path.join(OUT, 'data/latest.json'), JSON.stringify(latest));
 fs.writeFileSync(path.join(OUT, 'data/history.json'), JSON.stringify(Object.fromEntries(models.map(m => [m, history(m).map(({ date, p }) => ({ date, served: p.served, providers: p.providers, changed_since_baseline: date === BASELINE.date ? null : p.drift_vs_compare, noise: p.noise, shuffle: p.shuffle, paraphrase: p.paraphrase, accuracy: p.accuracy, accuracy_ci: p.accuracy_ci, latency_p50: p.latency_p50, latency_p95: p.latency_p95, error_rate: p.error_rate }))]))));
 fs.copyFileSync(path.join(ROOT, 'suite/manifest-v1.json'), path.join(OUT, 'data/manifest-v1.json'));
 fs.copyFileSync(path.join(ROOT, 'suite/core-v1.public.jsonl'), path.join(OUT, 'data/core-v1.public.jsonl'));
-write('data/index.html', page({ path: '/data/', title: 'Data', description: 'Download Decision Drift results, the public probe suite and the manifest.', body: `<h1>Data</h1><p class="lede">Everything here is regenerated after each daily run.</p><ul>
+write('data/index.html', page({ path: '/data/', title: 'Data', description: 'Download Decision Drift results, the public probe suite and the manifest.', body: `<h1>Data</h1><p class="lede">Everything here is regenerated after each daily run. Data is CC BY 4.0: credit "Decision Drift (decisiondrift.dev)" with a link. CLINC150-derived suite items stay CC BY 3.0.</p><ul>
 <li><a href="/data/latest.json">latest.json</a>: every metric for every model in the latest run.</li>
 <li><a href="/data/history.json">history.json</a>: per-model metrics for every run since Oct 20, 2026.</li>
 <li><a href="/data/core-v1.public.jsonl">core-v1.public.jsonl</a>: the public split of the suite, with gold labels.</li>
