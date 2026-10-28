@@ -16,6 +16,11 @@ export default defineRailway(() => {
     source: github("bomliu/decision-drift", { branch: "main" }),
     build: { builder: "DOCKERFILE", dockerfilePath: "deploy/site.Dockerfile" },
     healthcheck: "/status.json",
+    // Cookieless analytics on the self-hosted Umami (public values; they appear in every page).
+    env: {
+      UMAMI_SRC: "https://umami-production-fd66.up.railway.app/script.js",
+      UMAMI_WEBSITE_ID: "dba030fe-7ca9-463d-b3a9-f68f061dd7c9",
+    },
     // decisiondrift.dev is added with `railway domain` (custom domains cannot be registered from config)
   });
 
