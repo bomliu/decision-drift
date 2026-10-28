@@ -76,6 +76,7 @@ for (const m of models) {
     shuffle: compare(base, index(recs, 'shuffle'), undefined, true),
     paraphrase: compare(base, index(recs, 'para'), undefined, true),
     drift_vs_compare: cmp.size ? compare(index(cmp.get(m), 'base'), base) : null,
+    drift_by_type: cmp.size ? Object.fromEntries(['noul', 'choice', 'score'].map(t => [t, compare(index(cmp.get(m), 'base'), base, k => qType(k) === t)])) : null,
   };
 }
 

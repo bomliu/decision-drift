@@ -84,226 +84,305 @@ const postDirs = [path.join(ROOT, 'posts'), ...(args.drafts === 'true' ? [path.j
 const posts = postDirs.filter(d => fs.existsSync(d)).flatMap(d => fs.readdirSync(d).filter(f => f.endsWith('.md')).map(f => readPost(path.join(d, f))))
   .filter(p => !p.draft || args.drafts === 'true').sort((a, b) => b.date.localeCompare(a.date));
 
-// ---------- charts ----------
-// One series per chart (flip rate vs the Oct 20 baseline), a dashed noise reference, hover/focus tooltips.
-function trace(m: string, w = 220, h = 44, withAxis = false, sharedMax?: number) {
-  const pts = reports.map(r => ({ date: r.date, d: drift(m, r), noise: r.perModel[m]?.noise?.flip_rate })).filter(x => x.d !== undefined);
-  const vals = pts.map(x => (x.d ? x.d.flip_rate : 0)).concat(pts.map(x => x.noise ?? 0));
-  const ymax = (sharedMax ?? Math.max(0.05, ...vals.filter(Number.isFinite))) * 1.15;
-  const padL = withAxis ? 34 : 4, padR = 6, padT = 6, padB = withAxis ? 18 : 6;
-  const x = (i: number) => padL + (pts.length <= 1 ? (w - padL - padR) / 2 : (i * (w - padL - padR)) / (pts.length - 1));
-  const y = (v: number) => padT + (h - padT - padB) * (1 - v / ymax);
-  const line = pts.map((p, i) => `${x(i).toFixed(1)},${y(p.d ? p.d.flip_rate : 0).toFixed(1)}`).join(' ');
-  const noise = latest.perModel[m]?.noise?.flip_rate;
-  const axis = withAxis ? `<g class="axis"><line x1="${padL}" x2="${w - padR}" y1="${y(0)}" y2="${y(0)}"/><text x="${padL - 6}" y="${y(0) + 4}" text-anchor="end">0%</text><text x="${padL - 6}" y="${y(ymax / 1.15) + 4}" text-anchor="end">${(ymax / 1.15 * 100).toFixed(0)}%</text>${pts.map((p, i) => `<text x="${x(i)}" y="${h - 4}" text-anchor="${pts.length > 1 && i === pts.length - 1 ? 'end' : pts.length > 1 && i === 0 ? 'start' : 'middle'}">${esc(dateLong(p.date).replace(/, \d{4}$/, ''))}</text>`).join('')}</g>` : '';
-  const dots = pts.map((p, i) => {
-    const v = p.d ? p.d.flip_rate : 0;
-    const tip = p.d ? `${dateLong(p.date)}: ${pct(v)} of answers differ from Oct 20 (95% CI ${ci(p.d.ci)}); noise ${pct(p.noise)}` : `${dateLong(p.date)}: baseline`;
-    return `<g class="pt" tabindex="0" data-tip="${esc(tip)}"><circle class="hit" cx="${x(i)}" cy="${y(v)}" r="10"/><circle class="dot" cx="${x(i)}" cy="${y(v)}" r="4"/></g>`;
-  }).join('');
-  return `<svg class="trace" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" role="img" aria-label="${esc(`${m}: share of answers that differ from the Oct 20 baseline, by run date`)}">${axis}${noise != null ? `<line class="noise" x1="${padL}" x2="${w - padR}" y1="${y(noise)}" y2="${y(noise)}"><title>Noise floor ${pct(noise)}</title></line>` : ''}<polyline class="line" points="${line}"/>${dots}</svg>`;
+// ---------- display helpers ----------
+const VENDOR: Record<string, string> = { typesafe: 'TypeSafe', perplexity: 'Perplexity', microsoft: 'Microsoft', cloudflare: 'Cloudflare', liquid: 'Liquid', 'nace-ai': 'Nace.AI', inception: 'Inception', upstage: 'Upstage', respan: 'Respan', togethercomputer: 'Together', jaredpalmer: 'Jared Palmer', scaledown: 'ScaleDown', openai: 'OpenAI' };
+const vendorOf = (m: string) => m.replace(/^~/, '').split('/')[0];
+const vendorName = (m: string) => VENDOR[vendorOf(m)] ?? vendorOf(m);
+const nameOf = (m: string) => m.replace(/^~/, '').split('/').slice(1).join('/');
+const isAlias = (m: string) => m.startsWith('~');
+const baselineOf = (m: string) => reports[0]?.date === BASELINE.date ? reports[0].perModel[m] : undefined;
+const TYPE_NAME: Record<string, string> = { noul: 'Yes/no', choice: 'Pick-one', score: 'Score' };
+const shortDate = (d: string) => new Date(d + 'T00:00:00Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
+const utcTime = (iso: string) => new Date(iso).toISOString().slice(11, 16) + ' UTC';
+
+// Short factual notes for a flagged model, derived from the data.
+function notes(m: string): string[] {
+  const p = latest.perModel[m]; const b = baselineOf(m); const d = drift(m, latest);
+  if (!p || !d || verdict(m).key !== 'changed') return [];
+  const out: string[] = [];
+  if (b && b.served.join() === p.served.join()) out.push('Same snapshot ID.');
+  else if (b) out.push('New snapshot ID.');
+  if (p.noise.flip_rate === 0) out.push('Zero noise.');
+  const types = Object.entries<any>(p.drift_by_type ?? {}).filter(([, v]) => v.n >= 50).sort((a, b) => b[1].flip_rate - a[1].flip_rate);
+  if (types[0] && types[0][1].flip_rate >= 2 * d.flip_rate) out.push(`${TYPE_NAME[types[0][0]]} answers: ${pct(types[0][1].flip_rate)} changed.`);
+  return out.slice(0, 2);
 }
 
 // ---------- layout ----------
 // Cookieless page analytics (self-hosted Umami); only counts visits on the production domain.
 const UMAMI = process.env.UMAMI_SRC && process.env.UMAMI_WEBSITE_ID
   ? `<script defer src="${process.env.UMAMI_SRC}" data-website-id="${process.env.UMAMI_WEBSITE_ID}" data-domains="decisiondrift.dev"></script>` : '';
+
 const CSS = `
-:root{--paper:#F7F9FA;--grid:#E6ECF0;--ink:#1B2430;--muted:#55636F;--trace:#2457C5;--warn:#B26A00;--panel:#FFFFFF;--focus:#2457C5;color-scheme:light}
-@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--paper:#121A23;--grid:#263241;--ink:#E4EAF0;--muted:#9AA8B5;--trace:#5A82E0;--warn:#C0843A;--panel:#17212C;--focus:#7FA6FF;color-scheme:dark}}
-:root[data-theme="dark"]{--paper:#121A23;--grid:#263241;--ink:#E4EAF0;--muted:#9AA8B5;--trace:#5A82E0;--warn:#C0843A;--panel:#17212C;--focus:#7FA6FF;color-scheme:dark}
+:root{--bg:#FFFFFF;--ink:#1C2127;--muted:#4A5560;--faint:#7B8794;--rule:#E3E7EB;--soft:#F3F5F7;--band:#E3E7EB;--dot:#7B8794;--hot:#C2410C;--link:#1F4FB8;--base:#1C2127;--ok:#9FB3C8;color-scheme:light}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#14181D;--ink:#E6E9ED;--muted:#A3ADB8;--faint:#7E8995;--rule:#2A3139;--soft:#1B2026;--band:#2B333C;--dot:#5B6B7C;--hot:#E06A2C;--link:#8AB4F8;--base:#E6E9ED;--ok:#4D5F72;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#14181D;--ink:#E6E9ED;--muted:#A3ADB8;--faint:#7E8995;--rule:#2A3139;--soft:#1B2026;--band:#2B333C;--dot:#5B6B7C;--hot:#E06A2C;--link:#8AB4F8;--base:#E6E9ED;--ok:#4D5F72;color-scheme:dark}
 *{box-sizing:border-box}
-html{font-size:17px}
-body{margin:0;background:var(--paper);color:var(--ink);font:400 1rem/1.55 "Instrument Sans",system-ui,-apple-system,"Segoe UI",sans-serif;font-variant-numeric:tabular-nums;
- background-image:linear-gradient(var(--grid) 1px,transparent 1px);background-size:100% 28px;background-attachment:fixed}
-a{color:var(--trace);text-underline-offset:.18em}
-a:focus-visible,.pt:focus-visible,button:focus-visible{outline:2px solid var(--focus);outline-offset:2px;border-radius:3px}
-.wrap{max-width:1040px;margin:0 auto;padding:0 16px}
-header.site{display:flex;flex-wrap:wrap;gap:8px 24px;align-items:baseline;justify-content:space-between;padding:22px 0 10px}
-.mark{font-weight:600;font-size:1.15rem;letter-spacing:-.01em;color:var(--ink);text-decoration:none}
-.mark span{color:var(--trace)}
-nav.site{display:flex;flex-wrap:wrap;gap:4px 16px}
-nav.site a{color:var(--muted);text-decoration:none}
-nav.site a:hover,nav.site a[aria-current]{color:var(--ink)}
-main{padding-bottom:64px}
-h1{font-size:2.1rem;line-height:1.15;letter-spacing:-.02em;font-weight:600;max-width:24ch;margin:28px 0 12px}
-h2{font-size:1.35rem;line-height:1.25;font-weight:600;margin:44px 0 10px}
-h3{font-size:1.08rem;font-weight:600;margin:28px 0 6px}
-p,li{max-width:70ch}
-.lede{font-size:1.12rem;color:var(--muted);max-width:62ch}
-.fresh{display:flex;flex-wrap:wrap;gap:2px 8px;align-items:baseline;margin:6px 0 14px;color:var(--muted)}
-.fresh .ok{width:9px;height:9px;border-radius:50%;background:var(--trace);align-self:center}
-.fresh .bad{width:9px;height:9px;border-radius:50%;background:var(--warn);align-self:center}
-.panel{background:var(--panel);border:1px solid var(--grid);border-radius:6px;padding:4px 0}
-.strip{list-style:none;margin:20px 0 0;padding:0}
-.strip li{display:grid;grid-template-columns:minmax(0,17.5rem) 220px minmax(0,1fr);gap:4px 18px;align-items:center;padding:6px 14px;border-bottom:1px solid var(--grid);max-width:none}
-.strip li:last-child{border-bottom:0}
-.strip .name{overflow-wrap:anywhere}
-.strip .read{color:var(--muted)}
-.strip .read strong{color:var(--ink);font-weight:600}
-.flag{display:inline-flex;gap:5px;align-items:center;font-size:.9rem;font-weight:600;color:var(--ink)}
-.flag svg{fill:var(--warn);flex:none;width:12px;height:12px}
-.trace .line{fill:none;stroke:var(--trace);stroke-width:2;stroke-linejoin:round;stroke-linecap:round}
-.trace .noise{stroke:var(--muted);stroke-width:1;stroke-dasharray:3 3}
-.trace .dot{fill:var(--trace);stroke:var(--panel);stroke-width:2}
-.trace .hit{fill:transparent}
-.trace .axis line{stroke:var(--grid)}
-.trace .axis text{fill:var(--muted);font-size:11px}
-svg.trace.big{width:100%;max-width:640px;height:auto}
-.table-wrap{overflow-x:auto;margin:12px 0;border:1px solid var(--grid);border-radius:6px;background:var(--panel)}
-table{border-collapse:collapse;width:100%;font-size:.92rem}
-th,td{text-align:left;padding:7px 12px;border-bottom:1px solid var(--grid);vertical-align:top;white-space:nowrap}
-td.wrap-ok,th.wrap-ok{white-space:normal;min-width:12rem}
-th{font-weight:600;color:var(--muted)}
-td.num,th.num{text-align:right}
-tbody tr:last-child td{border-bottom:0}
-code{font-size:.9em;background:var(--grid);padding:.05em .3em;border-radius:3px}
-.note{color:var(--muted);font-size:.92rem}
-.posts{list-style:none;padding:0}
-.posts li{margin:0 0 18px}
-.posts .when{color:var(--muted);font-size:.92rem}
-article{max-width:72ch}
-footer.site{border-top:1px solid var(--grid);padding:20px 0 40px;color:var(--muted);font-size:.92rem}
-#tip{position:fixed;pointer-events:none;background:var(--ink);color:var(--paper);padding:6px 9px;border-radius:4px;font-size:.85rem;max-width:280px;display:none;z-index:9}
-@media (max-width:720px){h1{font-size:1.65rem}.strip li{grid-template-columns:1fr;padding:10px 12px}.strip svg.trace{width:100%;height:auto}}
+body{margin:0;background:var(--bg);color:var(--ink);font:400 16px/1.55 "Public Sans",system-ui,-apple-system,"Segoe UI",sans-serif;font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased}
+a{color:var(--link);text-underline-offset:.16em;text-decoration-thickness:1px}
+a:focus-visible,[tabindex]:focus-visible{outline:2px solid var(--link);outline-offset:2px;border-radius:2px}
+.wrap{max-width:1080px;margin:0 auto;padding:0 20px}
+.mast{display:flex;flex-wrap:wrap;gap:6px 20px;justify-content:space-between;align-items:baseline;border-bottom:2px solid var(--ink);padding:26px 0 10px}
+.mark{font-weight:700;font-size:17px;color:var(--ink);text-decoration:none;letter-spacing:-.01em}
+.mast nav{display:flex;flex-wrap:wrap;gap:4px 18px}.mast nav a{color:var(--muted);text-decoration:none;font-size:15px}
+.mast nav a:hover,.mast nav a[aria-current]{color:var(--ink);text-decoration:underline;text-decoration-color:var(--rule)}
+main{padding:0 0 56px}
+h1,h2.serif{font-family:Newsreader,Georgia,serif;font-weight:600;letter-spacing:-.015em}
+h1{font-size:40px;line-height:1.1;margin:34px 0 6px}
+h2{font-size:17px;font-weight:700;margin:40px 0 10px}
+h3{font-size:16px;font-weight:700;margin:24px 0 6px}
+p,li{max-width:68ch}
+.dek{font-size:18px;color:var(--muted);margin:0 0 22px}
+.crumb{color:var(--faint);font-size:14px;margin:26px 0 0}.crumb a{color:var(--faint)}
+.crumb+h1{margin-top:4px}
+.meta{color:var(--muted);margin:0 0 24px}
+.note,.foot{color:var(--faint);font-size:14px}
+.foot{border-top:1px solid var(--rule);margin-top:18px;padding-top:12px}
+.hot{color:var(--hot)}
+code{font-size:.92em;background:var(--soft);padding:.05em .3em;border-radius:3px}
+/* key */
+.key{display:flex;flex-wrap:wrap;gap:8px 22px;font-size:14px;color:var(--muted);margin:0 0 10px}
+.key i{display:inline-block;vertical-align:-2px;margin-right:7px}
+.k-band{width:26px;height:12px;background:var(--band);border-radius:3px}.k-dot{width:11px;height:11px;border-radius:50%;background:var(--dot)}.k-hot{width:11px;height:11px;border-radius:50%;background:var(--hot)}
+/* dot chart */
+.dc{--name:15rem;--note:16rem}
+.dc-axis,.dc-row{display:grid;grid-template-columns:var(--name) minmax(0,1fr) var(--note);gap:0 18px;align-items:center}
+.dc-axis .ticks{position:relative;height:22px;border-bottom:1px solid var(--rule)}
+.dc-axis .ticks span{position:absolute;bottom:4px;transform:translateX(-50%);font-size:12px;color:var(--faint)}
+.dc ol{list-style:none;margin:0;padding:0}
+.dc-row{min-height:30px;max-width:none;padding:2px 0}
+.dc-row .nm{text-align:right;font-size:14px;color:var(--ink);text-decoration:none;line-height:1.25;overflow-wrap:anywhere}
+.dc-row .nm small{color:var(--faint);font-size:12px;margin-left:5px}
+.dc-row .nm:hover b,.dc-row .nm:hover{text-decoration:underline;text-decoration-color:var(--rule)}
+.dc-row.is-hot .nm{font-weight:700}
+.dc-row .nm b{font-weight:inherit}
+.track{position:relative;height:26px;background:linear-gradient(var(--rule),var(--rule)) left center/100% 1px no-repeat}
+.track .grid{position:absolute;top:0;bottom:0;width:1px;background:var(--soft)}
+.track .band{position:absolute;left:0;top:7px;height:12px;border-radius:3px;background:var(--band)}
+.track .dot{position:absolute;top:7px;width:12px;height:12px;margin-left:-6px;border-radius:50%;background:var(--dot);box-shadow:0 0 0 2px var(--bg)}
+.is-hot .track .dot{background:var(--hot)}
+.track .hit{position:absolute;top:1px;width:24px;height:24px;margin-left:-12px;border-radius:50%}
+.track .val{position:absolute;top:3px;font-size:13px;color:var(--muted);margin-left:12px;white-space:nowrap}
+.track .val.flip{margin-left:0;transform:translateX(calc(-100% - 12px))}
+.is-hot .track .val{color:var(--hot);font-weight:700}
+.dc-row .nt{font-family:Newsreader,Georgia,serif;font-style:italic;font-size:14px;line-height:1.3;color:var(--ink)}
+.sub-list{color:var(--muted);font-size:14px;margin:14px 0 0}
+/* tables */
+table{border-collapse:collapse;width:100%;font-size:15px}
+th{color:var(--faint);font-weight:600;font-size:13px;text-align:right;padding:8px 10px;border-bottom:1px solid var(--rule);white-space:nowrap}
+td{padding:9px 10px;border-bottom:1px solid var(--soft);text-align:right;vertical-align:top}
+th:first-child,td:first-child{text-align:left;padding-left:0}
+td small{display:block;color:var(--faint);font-size:12px}
+td.l,th.l{text-align:left}
+table.narrow{max-width:560px}
+.tbl-models td:first-child a{color:var(--ink);font-weight:600;text-decoration:none}.tbl-models td:first-child a:hover{text-decoration:underline}
+/* stats */
+.stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border-top:1px solid var(--rule);border-bottom:1px solid var(--rule);margin:0 0 30px}
+.stats div{padding:14px 16px 14px 0}.stats b{display:block;font-size:26px;font-weight:700;line-height:1.2}.stats span{color:var(--faint);font-size:14px}
+/* daily squares */
+.days{display:flex;gap:4px;margin:0 0 6px}.days span{flex:1 1 0;height:34px;border-radius:2px;min-width:0}
+.d-base{background:var(--base)}.d-ok{background:var(--ok)}.d-hot{background:var(--hot)}.d-miss{border:1px dashed var(--faint)}.d-future{background:var(--soft)}
+.days-axis{display:flex;justify-content:space-between;color:var(--faint);font-size:13px;margin:0 0 8px}
+.legend{display:flex;flex-wrap:wrap;gap:6px 18px;color:var(--muted);font-size:13px;margin:0 0 8px}.legend i{display:inline-block;width:12px;height:12px;border-radius:2px;margin-right:6px;vertical-align:-1px}
+/* prose */
+article h2{font-family:Newsreader,Georgia,serif;font-size:24px;font-weight:600;margin:36px 0 8px;letter-spacing:-.01em}
+article p,article li{font-size:17px;line-height:1.65}
+article .tw{overflow-x:auto}
+.posts{list-style:none;padding:0}.posts li{margin:0 0 20px}.posts a{font-weight:600}.posts .when{color:var(--faint);font-size:14px}
+footer.site{border-top:1px solid var(--rule);padding:18px 0 40px;color:var(--faint);font-size:14px}
+footer.site a{color:var(--faint)}
+#tip{position:fixed;pointer-events:none;background:var(--ink);color:var(--bg);padding:6px 9px;border-radius:4px;font-size:13px;max-width:280px;display:none;z-index:9}
+@media (max-width:760px){
+ h1{font-size:30px}
+ .dc-axis{display:none}
+ .dc-row{grid-template-columns:1fr;gap:2px;padding:8px 0;border-bottom:1px solid var(--soft)}
+ .dc-row .nm{text-align:left}
+ .stats{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .opt,.long{display:none}
+ table{font-size:14px}th,td{padding:8px 6px}th{white-space:normal}
+ .tbl-models td:first-child{overflow-wrap:anywhere}
+}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 `;
-const TIP_JS = `const t=document.getElementById('tip');function show(e,el){t.textContent=el.dataset.tip;t.style.display='block';const r=el.getBoundingClientRect();t.style.left=Math.min(innerWidth-290,r.left+12)+'px';t.style.top=(r.top-38)+'px'}
-document.querySelectorAll('.pt').forEach(el=>{el.addEventListener('mouseenter',e=>show(e,el));el.addEventListener('focus',e=>show(e,el));el.addEventListener('mouseleave',()=>t.style.display='none');el.addEventListener('blur',()=>t.style.display='none')});`;
+const TIP_JS = `const t=document.getElementById('tip');function show(el){t.textContent=el.dataset.tip;t.style.display='block';const r=el.getBoundingClientRect();t.style.left=Math.max(8,Math.min(innerWidth-290,r.left))+'px';t.style.top=(r.top-40)+'px'}
+document.querySelectorAll('[data-tip]').forEach(el=>{el.addEventListener('mouseenter',()=>show(el));el.addEventListener('focus',()=>show(el));el.addEventListener('mouseleave',()=>t.style.display='none');el.addEventListener('blur',()=>t.style.display='none')});`;
 
-const NAV: [string, string][] = [['/', 'Tracker'], ['/models/', 'Models'], ['/posts/', 'Findings'], ['/method/', 'Method'], ['/data/', 'Data'], ['/status/', 'Status']];
+const NAV: [string, string][] = [['/models/', 'Models'], ['/posts/', 'Findings'], ['/method/', 'Method'], ['/data/', 'Data']];
 function page(p: { path: string; title: string; description: string; body: string }) {
-  const full = p.path === '/' ? 'Decision Drift: daily tracker for decision models' : `${p.title} · Decision Drift`;
+  const full = p.path === '/' ? 'Decision Drift: daily answer drift in decision models' : `${p.title} · Decision Drift`;
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${esc(full)}</title><meta name="description" content="${esc(p.description)}"><link rel="canonical" href="${SITE}${p.path}">
 <meta property="og:title" content="${esc(full)}"><meta property="og:description" content="${esc(p.description)}"><meta property="og:type" content="website"><meta property="og:url" content="${SITE}${p.path}">
 <link rel="alternate" type="application/rss+xml" title="Decision Drift" href="/feed.xml">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="icon" href="data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><polyline points="1,11 5,11 7,4 9,13 11,8 15,8" fill="none" stroke="#2457C5" stroke-width="2"/></svg>')}">
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,500;6..72,600&family=Public+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+<link rel="icon" href="data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><rect x="1" y="7" width="9" height="3" rx="1.5" fill="#9FB3C8"/><circle cx="12.5" cy="8.5" r="2.5" fill="#C2410C"/></svg>')}">
 <style>${CSS}</style>${UMAMI}</head><body><div class="wrap">
-<header class="site"><a class="mark" href="/">decision<span>drift</span></a><nav class="site" aria-label="Main">${NAV.map(([h, l]) => `<a href="${h}"${(h === '/' ? p.path === '/' : p.path.startsWith(h)) ? ' aria-current="page"' : ''}>${l}</a>`).join('')}</nav></header>
+<header class="mast"><a class="mark" href="/">Decision Drift</a><nav aria-label="Main">${NAV.map(([h, l]) => `<a href="${h}"${p.path.startsWith(h) ? ' aria-current="page"' : ''}>${l}</a>`).join('')}</nav></header>
 <main id="main">${p.body}</main>
-<footer class="site">An independent tracker; not affiliated with any model vendor. Runs daily at 10:17 UTC against every compatible decision model on OpenRouter. Code, public suite and raw results: <a href="${REPO}">${REPO.replace('https://', '')}</a>. Code MIT; data CC BY 4.0, except CLINC150-derived items (CC BY 3.0).</footer>
+<footer class="site">Independent; not affiliated with any model vendor. Runs daily at 10:17 UTC. <a href="/status/">Run status</a>. <a href="${REPO}">Source and raw data</a>. Code MIT; data CC BY 4.0, except CLINC150-derived items (CC BY 3.0).</footer>
 </div><div id="tip" role="tooltip"></div><script>${TIP_JS}</script></body></html>`;
 }
 function write(rel: string, content: string) {
   const f = path.join(OUT, rel); fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(f, content);
 }
-const flagIcon = '<svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M6 1 11 10H1z"/></svg>';
-const freshness = () => {
+const lastRunLine = () => {
   const s = status?.last_run;
-  const ok = !s || s.status === 'ok';
-  const when = s ? dateLong(s.date) : dateLong(latest.date);
-  return `<p class="fresh"><span class="${ok ? 'ok' : 'bad'}" aria-hidden="true"></span>${ok ? `Last run ${when}, ${latest.models} models.` : `The ${when} run had problems; see <a href="/status/">status</a>.`} <a href="/status/">Run status</a></p>`;
+  const when = s ? `${shortDate(s.date)}, ${utcTime(s.finished_at)}` : shortDate(latest.date);
+  return s && s.status !== 'ok' ? `Last run ${when} had problems; see <a href="/status/">run status</a>.` : `Last run ${when}. Next run 10:17 UTC.`;
 };
 
 // ---------- pages ----------
 fs.rmSync(OUT, { recursive: true, force: true });
-// flagged models first, then by how far changed answers sit above the model's own noise
-const excess = (m: string) => { const d = drift(m, latest); return d ? d.flip_rate - (latest.perModel[m].noise?.flip_rate ?? 0) : -1; };
-const ordered = models.filter(m => latest.perModel[m]).sort((a, b) => Number(verdict(b).key === 'changed') - Number(verdict(a).key === 'changed') || excess(b) - excess(a));
-const stripMax = Math.max(0.05, ...ordered.flatMap(m => reports.flatMap(r => [drift(m, r)?.flip_rate ?? 0, r.perModel[m]?.noise?.flip_rate ?? 0])));
-const daysTracked = reports.length;
+const tracked = models.filter(m => latest.perModel[m] && !isAlias(m));
+const compared = tracked.filter(m => drift(m, latest)?.n);
+const fresh = tracked.filter(m => !drift(m, latest)?.n);
+const aliases = models.filter(m => latest.perModel[m] && isAlias(m));
+const ordered = compared.slice().sort((a, b) => Number(verdict(b).key === 'changed') - Number(verdict(a).key === 'changed') || (drift(b, latest)!.flip_rate - drift(a, latest)!.flip_rate));
+// axis fits the changed-answer values; wide noise bands clip at the right edge
+const scaleMax = Math.max(0.04, Math.ceil((Math.max(...ordered.map(m => drift(m, latest)!.flip_rate)) + 0.005) / 0.02) * 0.02);
+const xPct = (v: number) => (100 * Math.min(v, scaleMax) / scaleMax).toFixed(2) + '%';
+const ticks = Array.from({ length: Math.round(scaleMax / 0.02) + 1 }, (_, i) => i * 0.02);
 const jev = latest.jev_113_vs_114;
+const flagged = ordered.filter(m => verdict(m).key === 'changed');
 
-write('index.html', page({ path: '/', title: 'Tracker', description: 'Daily, independent measurements of whether decision models such as Jev, Clef and Decider change their answers over time.', body: `
-<h1>Do decision models keep giving the same answers?</h1>
-<p class="lede">Every day we send the same frozen suite (${latest.items} inputs, ${(manifest.splits.public.questions + manifest.splits.private.questions).toLocaleString()} questions) to every decision model on OpenRouter and record what changes. Each trace is the share of a model's answers that differ from its first run on Oct 20, 2026, all on one scale; the dashed line is how much it varies when asked the same thing twice.</p>
-${freshness()}
-<div class="panel"><ul class="strip">${ordered.map(m => {
-  const d = drift(m, latest); const v = verdict(m); const p = latest.perModel[m];
-  return `<li><div class="name"><a href="/models/${slug(m)}/">${esc(m)}</a></div>${trace(m, 220, 44, false, stripMax)}<div class="read">${d ? `<strong>${pct(d.flip_rate)}</strong> differ since Oct 20, noise ${pct(p.noise.flip_rate)}` : 'First run; no comparison yet'}${v.key === 'changed' ? ` <span class="flag">${flagIcon}${v.label}</span>` : ''}</div></li>`;
-}).join('')}</ul></div>
-<p class="note">${daysTracked} run${daysTracked === 1 ? '' : 's'} so far. A model is flagged when the lower end of its 95% interval for changed answers is above its own noise level. Hover or focus a point for the numbers; every value is also in the <a href="/models/">models table</a>.</p>
-${jev ? `<h2>Jev 1.14 is not Jev 1.13</h2><p>TypeSafe's <code>~typesafe/jev-latest</code> alias now serves 1.14. On our suite the two versions give a different top answer ${pct(jev.overall.flip_rate)} of the time (95% CI ${ci(jev.overall.ci)}), about five times their noise level, and Score questions moved most (${pct(jev.by_type.score.flip_rate)}). <a href="/findings/jev-1-13-vs-1-14/">See the breakdown</a>.</p>` : ''}
-${posts.length ? `<h2>Findings</h2><ul class="posts">${posts.slice(0, 3).map(p => `<li><a href="/posts/${p.slug}/">${esc(p.title)}</a><div class="when">${dateLong(p.date)}</div><div>${esc(p.summary)}</div></li>`).join('')}</ul>` : ''}
+const chart = `<div class="dc" role="group" aria-label="Share of answers changed since Oct 20, per model, with each model's noise">
+<div class="dc-axis" aria-hidden="true"><span></span><div class="ticks">${ticks.map(t => `<span style="left:${xPct(t)}">${Math.round(t * 100)}%</span>`).join('')}</div><span></span></div>
+<ol>${ordered.map(m => {
+  const d = drift(m, latest)!; const p = latest.perModel[m]; const hot = verdict(m).key === 'changed'; const x = d.flip_rate / scaleMax;
+  const tip = `${nameOf(m)}: ${pct(d.flip_rate)} changed since Oct 20 (95% CI ${ci(d.ci)}). Noise ${pct(p.noise.flip_rate)}.`;
+  return `<li class="dc-row${hot ? ' is-hot' : ''}"><a class="nm" href="/models/${slug(m)}/"><b>${esc(nameOf(m))}</b><small>${esc(vendorName(m))}</small></a>
+<div class="track">${ticks.slice(1, -1).map(t => `<span class="grid" style="left:${xPct(t)}"></span>`).join('')}<span class="band" style="width:${xPct(p.noise.ci[1])}" title="Noise up to ${pct(p.noise.ci[1])}"></span><span class="dot" style="left:${xPct(d.flip_rate)}"></span><span class="hit" style="left:${xPct(d.flip_rate)}" tabindex="0" data-tip="${esc(tip)}" aria-label="${esc(tip)}"></span><span class="val${x > 0.82 ? ' flip' : ''}" style="left:${xPct(d.flip_rate)}">${pct(d.flip_rate)}</span></div>
+<div class="nt">${notes(m).map(esc).join(' ')}</div></li>`;
+}).join('')}</ol></div>`;
+
+write('index.html', page({ path: '/', title: 'Tracker', description: 'Daily measurements of how often decision models such as Jev, Clef and Decider change their answers.', body: `
+<h1>Answers changed since Oct 20</h1>
+<p class="dek">${compared.length} decision models. The same ${latest.items} inputs and ${(manifest.splits.public.questions + manifest.splits.private.questions).toLocaleString()} questions, every day.</p>
+<div class="key"><span><i class="k-band"></i>Noise (same request, twice)</span><span><i class="k-dot"></i>Changed</span><span><i class="k-hot"></i>Changed beyond noise</span></div>
+${chart}
+${fresh.length ? `<p class="sub-list">New since Oct 20, no comparison yet: ${fresh.map(m => `<a href="/models/${slug(m)}/">${esc(nameOf(m))}</a>`).join(', ')}.</p>` : ''}
+${aliases.length ? `<p class="sub-list">Aliases: ${aliases.map(m => `<a href="/models/${slug(m)}/">${esc(m)}</a> serves ${esc(latest.perModel[m].served.join(', ').replace(/^[^/]+\//, ''))}`).join('; ')}.</p>` : ''}
+<p class="foot">${lastRunLine()} Flagged: 95% interval above the model's noise. <a href="/method/">Method</a>.</p>
+${jev ? `<h2>Jev 1.14 vs 1.13</h2><p>Different top answer on ${pct(jev.overall.flip_rate)} of questions (95% CI ${ci(jev.overall.ci)}). Noise: ${pct(latest.perModel['typesafe/jev-1.13']?.noise.flip_rate)} and ${pct(latest.perModel['typesafe/jev-1.14']?.noise.flip_rate)}. Score answers: ${pct(jev.by_type.score.flip_rate)}. <code>~typesafe/jev-latest</code> serves 1.14. <a href="/findings/jev-1-13-vs-1-14/">Breakdown</a>.</p>` : ''}
+${posts.length ? `<h2>Findings</h2><ul class="posts">${posts.slice(0, 3).map(p => `<li><a href="/posts/${p.slug}/">${esc(p.title)}</a><div class="when">${dateLong(p.date)}</div></li>`).join('')}</ul>` : ''}
 ` }));
 
-// models table + per-model pages
-const modelRows = models.filter(m => latest.perModel[m]).map(m => {
-  const p = latest.perModel[m]; const d = drift(m, latest);
-  return `<tr><td><a href="/models/${slug(m)}/">${esc(m)}</a></td><td class="num">${d ? pct(d.flip_rate) : '—'}</td><td class="num">${pct(p.noise.flip_rate)}</td><td class="num">${pct(p.shuffle.flip_rate)}</td><td class="num">${pct(p.paraphrase.flip_rate)}</td><td class="num">${pct(p.accuracy)}</td><td>${ci(p.accuracy_ci)}</td><td class="num">${ms(p.latency_p50)}</td><td class="num">${pct(p.error_rate)}</td></tr>`;
-}).join('');
-write('models/index.html', page({ path: '/models/', title: 'Models', description: 'Latest drift, noise, robustness, accuracy and latency for every tracked decision model.', body: `
-<h1>Models</h1><p class="lede">Latest run, ${dateLong(latest.date)}. Percentages are shares of top answers. Accuracy is on the gold-labeled questions, which are the easier, everyone-agrees part of the suite, so it is not a leaderboard; overlapping intervals mean no meaningful difference.</p>
-<div class="table-wrap"><table><thead><tr><th>Model</th><th class="num">Changed since Oct 20</th><th class="num">Noise</th><th class="num">Option shuffle</th><th class="num">Paraphrase</th><th class="num">Gold accuracy</th><th>95% CI</th><th class="num">Median latency</th><th class="num">Errors</th></tr></thead><tbody>${modelRows}</tbody></table></div>
+// models table
+const modelRow = (m: string) => {
+  const p = latest.perModel[m]; const d = drift(m, latest); const hot = verdict(m).key === 'changed';
+  return `<tr><td><a href="/models/${slug(m)}/">${esc(isAlias(m) ? m : nameOf(m))}</a><small>${esc(isAlias(m) ? 'serves ' + p.served.join(', ') : vendorName(m))}</small></td>
+<td class="${hot ? 'hot' : ''}">${d?.n ? pct(d.flip_rate) : '—'}${hot ? '<small class="hot">beyond noise</small>' : ''}</td><td>${pct(p.noise.flip_rate)}</td><td class="opt">${pct(p.shuffle.flip_rate)}</td><td class="opt">${pct(p.paraphrase.flip_rate)}</td>
+<td>${pct(p.accuracy)}<small>${ci(p.accuracy_ci)}</small></td><td class="opt">${ms(p.latency_p50)}</td></tr>`;
+};
+const tableHead = `<thead><tr><th>Model</th><th>Changed<span class="long"> since Oct 20</span></th><th>Noise</th><th class="opt">Option shuffle</th><th class="opt">Paraphrase</th><th>Gold<span class="long"> accuracy</span></th><th class="opt">Median latency</th></tr></thead>`;
+const byVendor = (a: string, b: string) => vendorName(a).localeCompare(vendorName(b)) || nameOf(a).localeCompare(nameOf(b));
+write('models/index.html', page({ path: '/models/', title: 'Models', description: 'Drift, noise, robustness, accuracy and latency for every tracked decision model.', body: `
+<h1>Models</h1><p class="dek">Latest run, ${shortDate(latest.date)}. Shares of top answers. Gold accuracy covers the clearer questions only and is not a ranking.</p>
+<table class="tbl-models">${tableHead}<tbody>${tracked.slice().sort(byVendor).map(modelRow).join('')}</tbody></table>
+${aliases.length ? `<h2>Aliases</h2><table class="tbl-models">${tableHead}<tbody>${aliases.map(modelRow).join('')}</tbody></table>` : ''}
 <h2>Not tracked</h2><ul>${Object.entries(excluded).map(([m, why]) => `<li><code>${esc(m)}</code>: ${esc(why)}</li>`).join('')}</ul>` }));
 
+// per-model pages
+const dayList = (() => {
+  const start = new Date(BASELINE.date + 'T00:00:00Z').getTime(); const lastIdx = Math.round((new Date(latest.date + 'T00:00:00Z').getTime() - start) / 864e5);
+  return Array.from({ length: Math.max(30, lastIdx + 1) }, (_, i) => new Date(start + i * 864e5).toISOString().slice(0, 10));
+})();
 for (const m of models) {
   const h = history(m); const last = h.at(-1)?.p; if (!last) continue;
-  const rows = h.map(({ date, p }) => {
-    const d = date === BASELINE.date ? null : p.drift_vs_compare;
-    return `<tr><td>${dateLong(date)}</td><td class="wrap-ok">${esc(p.served.join(', '))}</td><td class="wrap-ok">${esc(p.providers.join(', '))}</td><td class="num">${d ? pct(d.flip_rate) : 'baseline'}</td><td>${d ? ci(d.ci) : ''}</td><td class="num">${pct(p.noise.flip_rate)}</td><td class="num">${pct(p.shuffle.flip_rate)}</td><td class="num">${pct(p.paraphrase.flip_rate)}</td><td class="num">${pct(p.accuracy)}</td><td class="num">${ms(p.latency_p50)} / ${ms(p.latency_p95)}</td><td class="num">${pct(p.error_rate)}</td></tr>`;
+  const byDate = new Map(h.map(x => [x.date, x.p]));
+  const first = h[0].date;
+  const squares = dayList.map(d => {
+    const p = byDate.get(d);
+    if (d < first) return `<span class="d-future" data-tip="${shortDate(d)}: not tracked yet" tabindex="-1"></span>`;
+    if (!p) return d <= latest.date ? `<span class="d-miss" data-tip="${shortDate(d)}: no run"></span>` : `<span class="d-future"></span>`;
+    const dr = d === BASELINE.date ? null : p.drift_vs_compare;
+    if (!dr || !dr.n) return `<span class="d-base" data-tip="${shortDate(d)}: ${d === first && d !== BASELINE.date ? 'first run' : 'baseline'}"></span>`;
+    const hot = dr.ci[0] > p.noise.ci[1];
+    return `<span class="${hot ? 'd-hot' : 'd-ok'}" data-tip="${shortDate(d)}: ${pct(dr.flip_rate)} changed, noise ${pct(p.noise.flip_rate)}"></span>`;
   }).join('');
-  const isAlias = m.startsWith('~');
-  write(`models/${slug(m)}/index.html`, page({ path: `/models/${slug(m)}/`, title: m, description: `Daily drift, noise and robustness measurements for ${m}.`, body: `
-<h1>${esc(m)}</h1>
-<p class="lede">${isAlias ? `An alias. On ${dateLong(latest.date)} it served <code>${esc(last.served.join(', '))}</code>; a change of snapshot shows up in the table below.` : `Served by ${esc(last.providers.join(', '))}. Snapshot on ${dateLong(latest.date)}: <code>${esc(last.served.join(', '))}</code>.`}</p>
-<h2>Answers that differ from Oct 20</h2>${trace(m, 640, 160, true).replace('class="trace"', 'class="trace big"')}
-<p class="note">Solid line: share of top answers that differ from the Oct 20 baseline. Dashed line: the latest noise level, the share that differs between two identical requests sent minutes apart.</p>
+  const d = drift(m, latest); const hot = verdict(m).key === 'changed';
+  const snaps = [...new Set(h.flatMap(x => x.p.served))];
+  const rows = h.slice().reverse().map(({ date, p }) => {
+    const dr = date === BASELINE.date ? null : p.drift_vs_compare; const rh = dr?.n && dr.ci[0] > p.noise.ci[1];
+    return `<tr><td>${shortDate(date)}</td>${snaps.length > 1 ? `<td class="l opt">${esc(p.served.join(', '))}</td>` : ''}<td class="${rh ? 'hot' : ''}">${dr?.n ? pct(dr.flip_rate) : 'baseline'}</td><td class="opt">${dr?.n ? ci(dr.ci) : ''}</td><td>${pct(p.noise.flip_rate)}</td><td class="opt">${pct(p.shuffle.flip_rate)}</td><td class="opt">${pct(p.paraphrase.flip_rate)}</td><td>${pct(p.accuracy)}</td><td class="opt">${ms(p.latency_p50)}</td></tr>`;
+  }).join('');
+  const types = last.drift_by_type ? Object.entries<any>(last.drift_by_type).filter(([, v]) => v.n) : [];
+  write(`models/${slug(m)}/index.html`, page({ path: `/models/${slug(m)}/`, title: m, description: `Daily drift, noise and robustness for ${m}.`, body: `
+<p class="crumb"><a href="/models/">Models</a> / ${esc(isAlias(m) ? 'Aliases' : vendorName(m))}</p>
+<h1>${esc(isAlias(m) ? m : nameOf(m))}</h1>
+<p class="meta">${isAlias(m) ? `Alias. Serves ${esc(last.served.join(', '))}.` : `Snapshot ${esc(last.served.join(', '))}. Served by ${esc(last.providers.join(', '))}.`}</p>
+<div class="stats"><div><b class="${hot ? 'hot' : ''}">${d?.n ? pct(d.flip_rate) : '—'}</b><span>changed since Oct 20</span></div><div><b>${pct(last.noise.flip_rate)}</b><span>noise</span></div><div><b>${pct(last.shuffle.flip_rate)}</b><span>option shuffle</span></div><div><b>${pct(last.accuracy)}</b><span>gold accuracy</span></div></div>
+<h2>Daily runs</h2>
+<div class="days" role="img" aria-label="One square per day since Oct 20">${squares}</div>
+<div class="days-axis"><span>${shortDate(dayList[0])}</span><span>${shortDate(dayList.at(-1)!)}</span></div>
+<div class="legend"><span><i class="d-base"></i>Baseline</span><span><i class="d-ok"></i>Within noise</span><span><i class="d-hot"></i>Changed beyond noise</span><span><i class="d-miss"></i>No run</span></div>
 <h2>Run history</h2>
-<div class="table-wrap"><table><thead><tr><th>Run</th><th class="wrap-ok">Served snapshot</th><th class="wrap-ok">Providers</th><th class="num">Changed</th><th>95% CI</th><th class="num">Noise</th><th class="num">Shuffle</th><th class="num">Paraphrase</th><th class="num">Gold acc.</th><th class="num">p50 / p95</th><th class="num">Errors</th></tr></thead><tbody>${rows}</tbody></table></div>
-${last.errors ? `<h2>Errors in the latest run</h2><ul>${last.error_samples.map((s: string) => `<li><code>${esc(s)}</code></li>`).join('')}</ul>` : ''}
-${last.providers.length > 1 && last.noise_cross_provider?.n ? `<h2>Provider mixing</h2><p>This model is served by more than one upstream provider. Duplicate requests that went to a different provider changed ${pct(last.noise_cross_provider.flip_rate)} of answers (n=${last.noise_cross_provider.n}); same-provider duplicates changed ${pct(last.noise_same_provider.flip_rate)} (n=${last.noise_same_provider.n}).</p>` : ''}
+<table><thead><tr><th>Run</th>${snaps.length > 1 ? '<th class="l opt">Snapshot</th>' : ''}<th>Changed</th><th class="opt">95% CI</th><th>Noise</th><th class="opt">Shuffle</th><th class="opt">Paraphrase</th><th>Gold acc.</th><th class="opt">p50</th></tr></thead><tbody>${rows}</tbody></table>
+${types.length ? `<h2>Changed since Oct 20, by question type</h2><table class="narrow"><thead><tr><th>Type</th><th>Questions</th><th>Changed</th><th class="opt">95% CI</th></tr></thead><tbody>${types.map(([t, v]) => `<tr><td>${TYPE_NAME[t]}</td><td>${v.n}</td><td>${pct(v.flip_rate)}</td><td class="opt">${ci(v.ci)}</td></tr>`).join('')}</tbody></table>` : ''}
+${last.providers.length > 1 && last.noise_cross_provider?.n ? `<h2>Providers</h2><p>Served by ${esc(last.providers.join(', '))}. Repeat requests that went to a different provider changed ${pct(last.noise_cross_provider.flip_rate)} of answers (${last.noise_cross_provider.n} questions); same provider: ${pct(last.noise_same_provider.flip_rate)} (${last.noise_same_provider.n}).</p>` : ''}
+${last.errors ? `<h2>Errors, latest run</h2><p class="note">${last.errors} of ${last.requests} requests.</p><ul>${last.error_samples.map((s: string) => `<li><code>${esc(s)}</code></li>`).join('')}</ul>` : ''}
 ` }));
 }
 
 // Jev finding
 if (jev) {
-  const rows = (o: Record<string, any>) => Object.entries(o).sort((a, b) => b[1].flip_rate - a[1].flip_rate).map(([k, v]) => `<tr><td>${esc(k)}</td><td class="num">${v.n}</td><td class="num">${pct(v.flip_rate)}</td><td>${ci(v.ci)}</td><td class="num">${Number.isFinite(v.mean_tv) ? v.mean_tv.toFixed(3) : '—'}</td></tr>`).join('');
-  const head = '<thead><tr><th>Slice</th><th class="num">Questions</th><th class="num">Different answer</th><th>95% CI</th><th class="num">Mean distance</th></tr></thead>';
-  write('findings/jev-1-13-vs-1-14/index.html', page({ path: '/findings/jev-1-13-vs-1-14/', title: 'Jev 1.13 vs 1.14', description: 'How often TypeSafe Jev 1.14 gives a different answer than Jev 1.13 on the same questions.', body: `
-<h1>Jev 1.14 vs 1.13</h1><p class="lede">Both versions remain available on OpenRouter, so we ask both the same ${jev.overall.n.toLocaleString()} questions in every run. Latest run: ${dateLong(latest.date)}.</p>
-<p>The top answer differs ${pct(jev.overall.flip_rate)} of the time (95% CI ${ci(jev.overall.ci)}). Each version's own noise level is ${pct(latest.perModel['typesafe/jev-1.13']?.noise.flip_rate)} and ${pct(latest.perModel['typesafe/jev-1.14']?.noise.flip_rate)}. Gold accuracy is ${pct(latest.perModel['typesafe/jev-1.13']?.accuracy)} for 1.13 and ${pct(latest.perModel['typesafe/jev-1.14']?.accuracy)} for 1.14: the answers changed, but not toward being more often right on the clear cases.</p>
-<h2>By question type</h2><div class="table-wrap"><table>${head}<tbody>${rows(jev.by_type)}</tbody></table></div>
-<h2>By task family</h2><div class="table-wrap"><table>${head}<tbody>${rows(jev.by_family)}</tbody></table></div>
-<p class="note">Mean distance is the total-variation distance between the two probability distributions, from 0 (identical) to 1. Families with few questions have wide intervals.</p>` }));
+  const rows = (o: Record<string, any>, label: (k: string) => string) => Object.entries(o).sort((a, b) => b[1].flip_rate - a[1].flip_rate).map(([k, v]) => `<tr><td>${esc(label(k))}</td><td>${v.n}</td><td>${pct(v.flip_rate)}</td><td class="opt">${ci(v.ci)}</td></tr>`).join('');
+  const head = '<thead><tr><th>Slice</th><th>Questions</th><th>Different answer</th><th class="opt">95% CI</th></tr></thead>';
+  write('findings/jev-1-13-vs-1-14/index.html', page({ path: '/findings/jev-1-13-vs-1-14/', title: 'Jev 1.14 vs 1.13', description: 'How often TypeSafe Jev 1.14 gives a different answer than Jev 1.13 on the same questions.', body: `
+<h1>Jev 1.14 vs 1.13</h1><p class="dek">Both versions, the same ${jev.overall.n.toLocaleString()} questions, every run. Latest: ${shortDate(latest.date)}.</p>
+<div class="stats"><div><b>${pct(jev.overall.flip_rate)}</b><span>different top answer</span></div><div><b>${ci(jev.overall.ci)}</b><span>95% interval</span></div><div><b>${pct(latest.perModel['typesafe/jev-1.13']?.accuracy)} / ${pct(latest.perModel['typesafe/jev-1.14']?.accuracy)}</b><span>gold accuracy, 1.13 / 1.14</span></div><div><b>${pct(latest.perModel['typesafe/jev-1.13']?.noise.flip_rate)} / ${pct(latest.perModel['typesafe/jev-1.14']?.noise.flip_rate)}</b><span>noise, 1.13 / 1.14</span></div></div>
+<h2>By question type</h2><table class="narrow">${head}<tbody>${rows(jev.by_type, k => TYPE_NAME[k])}</tbody></table>
+<h2>By task family</h2><table>${head}<tbody>${rows(jev.by_family, k => k)}</tbody></table>
+<p class="note">Families with few questions have wide intervals.</p>` }));
 }
 
 // posts
-write('posts/index.html', page({ path: '/posts/', title: 'Findings', description: 'Write-ups of what the Decision Drift tracker has found.', body: `<h1>Findings</h1>${posts.length ? `<ul class="posts">${posts.map(p => `<li><a href="/posts/${p.slug}/">${esc(p.title)}</a><div class="when">${dateLong(p.date)}</div><div>${esc(p.summary)}</div></li>`).join('')}</ul>` : '<p>The first write-up is in progress. The <a href="/">tracker</a> is live in the meantime.</p>'}` }));
-for (const p of posts) write(`posts/${p.slug}/index.html`, page({ path: `/posts/${p.slug}/`, title: p.title, description: p.summary, body: `<article><h1>${esc(p.title)}</h1><p class="note">${dateLong(p.date)}</p>${p.html}</article>` }));
+write('posts/index.html', page({ path: '/posts/', title: 'Findings', description: 'Write-ups from the Decision Drift tracker.', body: `<h1>Findings</h1>${posts.length ? `<ul class="posts">${posts.map(p => `<li><a href="/posts/${p.slug}/">${esc(p.title)}</a><div class="when">${dateLong(p.date)}</div><div>${esc(p.summary)}</div></li>`).join('')}</ul>` : '<p>None yet. The <a href="/">tracker</a> updates daily.</p>'}` }));
+for (const p of posts) write(`posts/${p.slug}/index.html`, page({ path: `/posts/${p.slug}/`, title: p.title, description: p.summary, body: `<article><p class="crumb"><a href="/posts/">Findings</a> / ${dateLong(p.date)}</p><h1>${esc(p.title)}</h1>${p.html.replace(/<div class="table-wrap">/g, '<div class="tw">')}</article>` }));
 
 // method
 const cov = manifest.coverage;
 const covList = (o: Record<string, number>) => Object.entries(o).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${esc(k)} ${v}`).join(', ');
-write('method/index.html', page({ path: '/method/', title: 'Method', description: 'How Decision Drift measures drift, noise, robustness and calibration in decision models.', body: `<article>
+write('method/index.html', page({ path: '/method/', title: 'Method', description: 'How Decision Drift measures drift, noise, robustness and calibration.', body: `<article>
 <h1>Method</h1>
-<p class="lede">Decision models answer typed questions (yes/no, pick one, score on a scale) with probabilities instead of text. We check whether those answers stay put.</p>
-<h2>The suite</h2>
-<p>Version 1 has ${manifest.splits.public.states + manifest.splits.private.states} states and ${manifest.splits.public.questions + manifest.splits.private.questions} questions across task families (${covList(cov.family)}) and languages (${covList(cov.language)}). Every model gets the identical request. Questions follow the published System One conventions and are never tuned against results. Requests are immutable: a flawed item is retired and replaced, never edited, and the headline numbers always use the original cohort. Reference labels can be corrected after human review; corrections are logged in the manifest and never change what is sent to models.</p>
-<p>About 70% of the suite is public. The other 30% is private so that no vendor can train on the whole suite; we publish only its hash and aggregate scores. Public hash <code>${manifest.splits.public.sha256.slice(0, 16)}</code>, private hash <code>${manifest.splits.private.sha256.slice(0, 16)}</code>.</p>
-<h2>What we measure</h2>
+<p class="dek">Decision models answer typed questions (yes/no, pick one, score on a scale) with probabilities instead of text. This tracks whether those answers change.</p>
+<h2>Suite</h2>
+<p>Version 1: ${manifest.splits.public.states + manifest.splits.private.states} inputs, ${manifest.splits.public.questions + manifest.splits.private.questions} questions. Task families: ${covList(cov.family)}. Languages: ${covList(cov.language)}. Every model gets the identical request, and questions are never tuned against results.</p>
+<p>Requests are immutable. A flawed item is retired and replaced; headline numbers use the original cohort. Reference labels can be corrected after human review; corrections are logged in the manifest and never change what is sent.</p>
+<p>70% of the suite is public. 30% is private so no vendor can train on all of it; only its hash and aggregate scores are published. Public hash <code>${manifest.splits.public.sha256.slice(0, 16)}</code>, private hash <code>${manifest.splits.private.sha256.slice(0, 16)}</code>.</p>
+<h2>Measures</h2>
 <ul>
-<li><strong>Changed since Oct 20:</strong> the share of top answers that differ from the same model's first run, counting only byte-identical requests.</li>
-<li><strong>Noise:</strong> the share that differs when 100 states are sent again minutes later. Drift only counts when its interval sits above this.</li>
-<li><strong>Option shuffle and paraphrase:</strong> the share that changes when choice options are reordered, or when the instructions are reworded with the same meaning.</li>
-<li><strong>Gold accuracy and calibration:</strong> on questions where the reference label and two independent LLM labelers (GPT-6.1 Sol, Gemini 4 Argon) all agree. A person reviewed a stratified sample of 50 items before launch and corrected 23 reference labels. These are the clearer cases, so accuracy runs high and is not a ranking.</li>
-<li><strong>Latency, errors and cost</strong> as seen by our runner, network included.</li>
+<li><strong>Changed since Oct 20:</strong> share of top answers that differ from the model's first run, on byte-identical requests.</li>
+<li><strong>Noise:</strong> share that differs when 100 inputs are sent again minutes later. A model is flagged only when the 95% interval for changed answers sits above its noise interval.</li>
+<li><strong>Option shuffle, paraphrase:</strong> share that changes when choice options are reordered, or instructions reworded with the same meaning.</li>
+<li><strong>Gold accuracy:</strong> on questions where the reference label and two LLM labelers (GPT-6.1 Sol, Gemini 4 Argon) agree. A person reviewed a 50-item sample before launch and corrected 23 labels. These are the clearer cases, so this is a regression check, not a ranking.</li>
+<li><strong>Latency, errors, cost:</strong> as measured by the runner, network included.</li>
 </ul>
 <h2>Schedule and limits</h2>
-<p>Runs daily at 10:17 UTC through OpenRouter's decisions API, which is in alpha. Every response is stored raw. All intervals are 95% Wilson intervals; we do not report slice results that are not meaningful at their size. Models that cannot answer Choice and Score questions are listed as not tracked.</p>
+<p>Daily at 10:17 UTC through OpenRouter's decisions API, which is in alpha. Every response is stored raw. Intervals are 95% Wilson intervals. Models that can't answer Choice and Score questions are listed as not tracked.</p>
 </article>` }));
 
 // data + status
 fs.mkdirSync(path.join(OUT, 'data'), { recursive: true });
 fs.writeFileSync(path.join(OUT, 'data/latest.json'), JSON.stringify(latest));
-fs.writeFileSync(path.join(OUT, 'data/history.json'), JSON.stringify(Object.fromEntries(models.map(m => [m, history(m).map(({ date, p }) => ({ date, served: p.served, providers: p.providers, changed_since_baseline: date === BASELINE.date ? null : p.drift_vs_compare, noise: p.noise, shuffle: p.shuffle, paraphrase: p.paraphrase, accuracy: p.accuracy, accuracy_ci: p.accuracy_ci, latency_p50: p.latency_p50, latency_p95: p.latency_p95, error_rate: p.error_rate }))]))));
+fs.writeFileSync(path.join(OUT, 'data/history.json'), JSON.stringify(Object.fromEntries(models.map(m => [m, history(m).map(({ date, p }) => ({ date, served: p.served, providers: p.providers, changed_since_baseline: date === BASELINE.date ? null : p.drift_vs_compare, changed_by_type: date === BASELINE.date ? null : p.drift_by_type ?? null, noise: p.noise, shuffle: p.shuffle, paraphrase: p.paraphrase, accuracy: p.accuracy, accuracy_ci: p.accuracy_ci, latency_p50: p.latency_p50, latency_p95: p.latency_p95, error_rate: p.error_rate }))]))));
 fs.copyFileSync(path.join(ROOT, 'suite/manifest-v1.json'), path.join(OUT, 'data/manifest-v1.json'));
 fs.copyFileSync(path.join(ROOT, 'suite/core-v1.public.jsonl'), path.join(OUT, 'data/core-v1.public.jsonl'));
-write('data/index.html', page({ path: '/data/', title: 'Data', description: 'Download Decision Drift results, the public probe suite and the manifest.', body: `<h1>Data</h1><p class="lede">Everything here is regenerated after each daily run. Data is CC BY 4.0: credit "Decision Drift (decisiondrift.dev)" with a link. CLINC150-derived suite items stay CC BY 3.0.</p><ul>
-<li><a href="/data/latest.json">latest.json</a>: every metric for every model in the latest run.</li>
-<li><a href="/data/history.json">history.json</a>: per-model metrics for every run since Oct 20, 2026.</li>
-<li><a href="/data/core-v1.public.jsonl">core-v1.public.jsonl</a>: the public split of the suite, with gold labels.</li>
-<li><a href="/data/manifest-v1.json">manifest-v1.json</a>: coverage, labeling method and split hashes.</li>
-<li>Raw responses for every request on public items: <a href="${REPO}/tree/main/results">${REPO.replace('https://', '')}/results</a>.</li></ul>` }));
+write('data/index.html', page({ path: '/data/', title: 'Data', description: 'Download Decision Drift results, the public suite and the manifest.', body: `<h1>Data</h1><p class="dek">Regenerated after each daily run. CC BY 4.0: credit "Decision Drift (decisiondrift.dev)" with a link. CLINC150-derived items stay CC BY 3.0.</p>
+<table><thead><tr><th>File</th><th class="l">Contents</th></tr></thead><tbody>
+<tr><td><a href="/data/latest.json">latest.json</a></td><td class="l">Every metric, every model, latest run</td></tr>
+<tr><td><a href="/data/history.json">history.json</a></td><td class="l">Per-model metrics for every run since Oct 20, 2026</td></tr>
+<tr><td><a href="/data/core-v1.public.jsonl">core-v1.public.jsonl</a></td><td class="l">Public suite with gold labels</td></tr>
+<tr><td><a href="/data/manifest-v1.json">manifest-v1.json</a></td><td class="l">Coverage, labeling, split hashes, label corrections</td></tr>
+<tr><td><a href="${REPO}/tree/main/results">results/</a></td><td class="l">Raw responses for every public item, on GitHub</td></tr>
+</tbody></table>` }));
 fs.writeFileSync(path.join(OUT, 'status.json'), JSON.stringify(status ?? { last_run: { date: latest.date, status: 'ok' } }));
 const s = status;
-write('status/index.html', page({ path: '/status/', title: 'Status', description: 'Status of the latest Decision Drift collection run.', body: `<h1>Run status</h1>
-${s ? `<p class="lede">Latest run ${dateLong(s.last_run.date)}: <strong>${s.last_run.status === 'ok' ? 'completed' : 'had problems'}</strong>, finished ${esc(new Date(s.last_run.finished_at).toUTCString())}. Next run ${esc(s.schedule)}.</p>
-<ul><li>${s.models} models, ${s.requests.toLocaleString()} requests, ${s.errors} errors.</li>${s.models_with_errors.length ? `<li>Models with more than 5% errors: ${s.models_with_errors.map((m: string) => `<code>${esc(m)}</code>`).join(', ')}.</li>` : ''}</ul>` : `<p class="lede">Latest run ${dateLong(latest.date)}. Runs daily at 10:17 UTC.</p>`}
-<p>If a day is missing from the <a href="/">tracker</a>, that run did not complete. Gaps are left as gaps; nothing is backfilled.</p>` }));
+write('status/index.html', page({ path: '/status/', title: 'Run status', description: 'Status of the latest Decision Drift collection run.', body: `<h1>Run status</h1>
+${s ? `<div class="stats"><div><b class="${s.last_run.status === 'ok' ? '' : 'hot'}">${s.last_run.status === 'ok' ? 'Completed' : 'Problems'}</b><span>${shortDate(s.last_run.date)}, ${utcTime(s.last_run.finished_at)}</span></div><div><b>${s.models}</b><span>models</span></div><div><b>${s.requests.toLocaleString()}</b><span>requests</span></div><div><b>${s.errors}</b><span>errors</span></div></div>
+${s.models_with_errors.length ? `<p>More than 5% errors: ${s.models_with_errors.map((m: string) => `<code>${esc(m)}</code>`).join(', ')}.</p>` : ''}` : ''}
+<p>Next run 10:17 UTC. A missing day means that run didn't complete; gaps are not backfilled.</p>` }));
 
 // feeds and machine-readable files
 const feedItems = [
@@ -322,7 +401,7 @@ Latest run: ${latest.date}, ${latest.models} models, ${latest.items} states.
 ${jev ? `Jev 1.13 vs 1.14: ${pct(jev.overall.flip_rate)} of top answers differ (95% CI ${ci(jev.overall.ci)}).` : ''}
 
 ## Pages
-- [Tracker](${SITE}/): per-model traces of answers changed since Oct 20
+- [Tracker](${SITE}/): answers changed since Oct 20 per model, against each model's noise
 - [Models](${SITE}/models/): latest metrics table
 ${jev ? `- [Jev 1.13 vs 1.14](${SITE}/findings/jev-1-13-vs-1-14/): version comparison by question type and task family\n` : ''}- [Method](${SITE}/method/): suite design, metrics, limits
 ${posts.map(p => `- [${p.title}](${SITE}/posts/${p.slug}/): ${p.summary}`).join('\n')}
