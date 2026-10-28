@@ -2,7 +2,7 @@
 // Usage: node src/report.ts --date 2026-10-20 --run day1 [--dup day1-dup] [--compare-date 2026-10-20 --compare-run pilot]
 import fs from 'node:fs';
 import path from 'node:path';
-import { ROOT, type Item, loadItems } from './lib.ts';
+import { ROOT, type Item, loadItems, rng } from './lib.ts';
 import { normalize, loadRun, tv, goldMatches, quantile, mean, wilson, type Rec, type Norm } from './answers.ts';
 
 const args = Object.fromEntries(process.argv.slice(2).reduce<string[][]>((acc, a, i, all) => {
@@ -31,6 +31,28 @@ function compare(a: Answers, b: Answers, filter?: (key: string, n: Norm) => bool
   for (const [k, x] of a) { const y = b.get(k); if (!y || (filter && !filter(k, x))) continue; if (x.req && y.req && x.req !== y.req && !crossRequest) continue; n++; if (x.top !== y.top) flips++; tvs.push(tv(x.dist, y.dist)); }
   const [lo, hi] = wilson(flips, n);
   return { n, flips, flip_rate: n ? flips / n : NaN, ci: [lo, hi], mean_tv: mean(tvs) };
+}
+// Per-question 0/1 flip indicators for the same comparisons `compare` summarizes (used for bootstrap intervals).
+function flips(a: Answers, b: Answers, crossRequest = false): number[] {
+  const out: number[] = [];
+  for (const [k, x] of a) { const y = b.get(k); if (!y) continue; if (x.req && y.req && x.req !== y.req && !crossRequest) continue; out.push(x.top !== y.top ? 1 : 0); }
+  return out;
+}
+// Stability: weighted answer changes per 1,000 decisions. Over time counts only change above the model's noise.
+const WEIGHTS = { time: 0.4, repeat: 0.3, reorder: 0.15, reword: 0.15 };
+function stability(time: number[] | null, repeat: number[], reorder: number[], reword: number[]) {
+  const avg = (xs: number[]) => xs.length ? xs.reduce((s, v) => s + v, 0) / xs.length : 0;
+  const score = (t: number[] | null, r: number[], o: number[], w: number[]) => {
+    const c = { time: t ? Math.max(0, avg(t) - avg(r)) : 0, repeat: avg(r), reorder: avg(o), reword: avg(w) };
+    return { c, per_1000: 1000 * (WEIGHTS.time * c.time + WEIGHTS.repeat * c.repeat + WEIGHTS.reorder * c.reorder + WEIGHTS.reword * c.reword) };
+  };
+  const point = score(time, repeat, reorder, reword);
+  // percentile bootstrap over questions, each component resampled independently, fixed seed
+  const r = rng('stability'); const pick = (xs: number[]) => xs.map(() => xs[Math.floor(r() * xs.length)]);
+  const boots: number[] = [];
+  for (let i = 0; i < 1000; i++) boots.push(score(time && pick(time), pick(repeat), pick(reorder), pick(reword)).per_1000);
+  return { per_1000: point.per_1000, ci: [quantile(boots, 0.025), quantile(boots, 0.975)], components: point.c, weights: WEIGHTS,
+    n: { time: time?.length ?? 0, repeat: repeat.length, reorder: reorder.length, reword: reword.length } };
 }
 const qType = (k: string) => { const [id, q] = k.split('|'); return itemById.get(id)!.questions[q]?.type; };
 const fam = (k: string) => itemById.get(k.split('|')[0])!.family;
@@ -76,6 +98,8 @@ for (const m of models) {
     shuffle: compare(base, index(recs, 'shuffle'), undefined, true),
     paraphrase: compare(base, index(recs, 'para'), undefined, true),
     drift_vs_compare: cmp.size ? compare(index(cmp.get(m), 'base'), base) : null,
+    stability: (() => { const dupBase = index(dup.get(m), 'base'); if (!dupBase.size) return null;
+      return stability(cmp.size && cmp.get(m) ? flips(index(cmp.get(m), 'base'), base) : null, flips(base, dupBase), flips(base, index(recs, 'shuffle'), true), flips(base, index(recs, 'para'), true)); })(),
     drift_by_type: cmp.size ? Object.fromEntries(['noul', 'choice', 'score'].map(t => [t, compare(index(cmp.get(m), 'base'), base, k => qType(k) === t)])) : null,
   };
 }
