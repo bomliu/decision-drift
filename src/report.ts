@@ -17,6 +17,15 @@ const cmp = new Map<string, Rec[]>();
 for (const rn of (args['compare-run'] ?? '').split(',').filter(Boolean))
   for (const [m, recs] of loadRun(args['compare-date'] ?? date, rn)) cmp.set(m, [...(cmp.get(m) ?? []), ...recs]);
 
+// Noise is pooled over the last POOL runs that have a duplicate run, this one included. One day is only ~350
+// questions, too few to pin down a model that changes 5% of answers on repeat; pooling narrows the band.
+const POOL = 7;
+const poolRuns = fs.readdirSync(path.join(ROOT, 'results')).filter(d => /^\d{4}-\d{2}-\d{2}$/.test(d) && d < date).sort()
+  .flatMap(d => fs.readdirSync(path.join(ROOT, 'results', d)).filter(r => r.endsWith('-dup') && fs.existsSync(path.join(ROOT, 'results', d, r.slice(0, -4)))).map(r => ({ date: d, run: r.slice(0, -4), dup: r })))
+  .slice(-(POOL - 1)).map(x => { // keep only the indexed base answers, not the raw records
+    const main = loadRun(x.date, x.run), dup = loadRun(x.date, x.dup); const keep = (runs: Map<string, Rec[]>) => new Map([...dup.keys()].map(m => [m, index(runs.get(m), 'base')]));
+    return { date: x.date, main: keep(main), dup: keep(dup) }; });
+
 type Answers = Map<string, Norm>; // key `${item}|${qid}`
 function index(recs: Rec[] | undefined, variant: string): Answers {
   const m: Answers = new Map();
@@ -61,6 +70,7 @@ function stability(time: number[] | null, repeat: number[], reorder: number[], r
 const qType = (k: string) => { const [id, q] = k.split('|'); return itemById.get(id)!.questions[q]?.type; };
 const fam = (k: string) => itemById.get(k.split('|')[0])!.family;
 
+const pooledNoise = (m: string, base: Answers) => [...poolRuns.flatMap(r => r.dup.has(m) ? flips(r.main.get(m)!, r.dup.get(m)!) : []), ...flips(base, index(dup.get(m), 'base'))];
 const models = [...main.keys()].sort();
 const perModel: Record<string, any> = {};
 for (const m of models) {
@@ -97,13 +107,15 @@ for (const m of models) {
     accuracy_by_type: Object.fromEntries(Object.entries(byType).map(([t, [c, n]]) => [t, { acc: c / n, n }])),
     ece, brier_noul: mean(brier), overconfidence: graded ? mean(conf) - correct / graded : NaN,
     noise: compare(base, index(dup.get(m), 'base')),
+    noise_pooled: dup.get(m) ? (() => { const xs = pooledNoise(m, base); const k = xs.reduce((a, v) => a + v, 0); const [lo, hi] = wilson(k, xs.length);
+      return { n: xs.length, flips: k, flip_rate: xs.length ? k / xs.length : NaN, ci: [lo, hi], runs: [...poolRuns.filter(r => r.dup.has(m)).map(r => r.date), date] }; })() : null,
     noise_same_provider: compare(base, index(dup.get(m), 'base'), (k, x) => x.provider === index(dup.get(m), 'base').get(k)?.provider),
     noise_cross_provider: compare(base, index(dup.get(m), 'base'), (k, x) => { const y = index(dup.get(m), 'base').get(k); return !!y && x.provider !== y.provider; }),
     shuffle: compare(base, index(recs, 'shuffle'), undefined, true),
     paraphrase: compare(base, index(recs, 'para'), undefined, true),
     drift_vs_compare: cmp.size ? compare(index(cmp.get(m), 'base'), base) : null,
     stability: (() => { const dupBase = index(dup.get(m), 'base'); if (!dupBase.size) return null;
-      return stability(cmp.size && cmp.get(m) ? flips(index(cmp.get(m), 'base'), base) : null, flips(base, dupBase), flips(base, index(recs, 'shuffle'), true), flips(base, index(recs, 'para'), true)); })(),
+      return stability(cmp.size && cmp.get(m) ? flips(index(cmp.get(m), 'base'), base) : null, pooledNoise(m, base), flips(base, index(recs, 'shuffle'), true), flips(base, index(recs, 'para'), true)); })(),
     drift_by_type: cmp.size ? Object.fromEntries(['noul', 'choice', 'score'].map(t => [t, compare(index(cmp.get(m), 'base'), base, k => qType(k) === t)])) : null,
   };
 }
