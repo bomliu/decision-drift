@@ -359,8 +359,9 @@ const niceStep = (max: number) => { const raw = max / 4; const p = 10 ** Math.fl
 function axisFor(vals: number[]) {
   const s = vals.slice().sort((a, b) => b - a);
   const top = s[0] > 1.5 * s[1] ? s[1] : s[0]; // let a lone outlier overflow instead of squashing everyone else
-  const step = niceStep(top); const max = Math.ceil(top / step) * step;
-  return { max, ticks: Array.from({ length: Math.round(max / step) + 1 }, (_, i) => +(i * step).toFixed(6)) };
+  // end just past the widest value; ticks at nice steps (at most 5) that fit inside
+  const step = niceStep(top * 4 / 5); const max = top * 1.04;
+  return { max, ticks: Array.from({ length: Math.floor(max / step + 1e-9) + 1 }, (_, i) => +(i * step).toFixed(6)) };
 }
 const flagged = new Set(ordered.filter(m => verdict(m).key === 'changed'));
 const overall: Panel = (() => {
