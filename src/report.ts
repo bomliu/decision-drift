@@ -17,14 +17,20 @@ const cmp = new Map<string, Rec[]>();
 for (const rn of (args['compare-run'] ?? '').split(',').filter(Boolean))
   for (const [m, recs] of loadRun(args['compare-date'] ?? date, rn)) cmp.set(m, [...(cmp.get(m) ?? []), ...recs]);
 
-// Noise is pooled over the last POOL runs that have a duplicate run, this one included. One day is only ~350
-// questions, too few to pin down a model that changes 5% of answers on repeat; pooling narrows the band.
-const POOL = 7;
-const poolRuns = fs.readdirSync(path.join(ROOT, 'results')).filter(d => /^\d{4}-\d{2}-\d{2}$/.test(d) && d < date).sort()
-  .flatMap(d => fs.readdirSync(path.join(ROOT, 'results', d)).filter(r => r.endsWith('-dup') && fs.existsSync(path.join(ROOT, 'results', d, r.slice(0, -4)))).map(r => ({ date: d, run: r.slice(0, -4), dup: r })))
-  .slice(-(POOL - 1)).map(x => { // keep only the indexed base answers, not the raw records
-    const main = loadRun(x.date, x.run), dup = loadRun(x.date, x.dup); const keep = (runs: Map<string, Rec[]>) => new Map([...dup.keys()].map(m => [m, index(runs.get(m), 'base')]));
-    return { date: x.date, main: keep(main), dup: keep(dup) }; });
+// Every run in the last WINDOW days, indexed once and kept as top answers only (memory stays small).
+// Noise is pooled over the last POOL runs that have a duplicate run, this one included: one day is only ~350
+// questions, too few to pin down a model that changes 5% of answers on repeat.
+const WINDOW = 30, HALF_LIFE = 7, POOL = 7;
+const dayNum = (d: string) => Math.round(new Date(d + 'T00:00:00Z').getTime() / 864e5);
+const allDates = fs.readdirSync(path.join(ROOT, 'results')).filter(d => /^\d{4}-\d{2}-\d{2}$/.test(d) && d < date).sort();
+const mainRunOf = (d: string) => { const rs = fs.readdirSync(path.join(ROOT, 'results', d)); return rs.includes('daily') ? 'daily' : rs.includes('day1') ? 'day1' : null; };
+const windowDates = allDates.filter(d => dayNum(date) - dayNum(d) <= WINDOW && mainRunOf(d));
+const dupDates = new Set(windowDates.filter(d => fs.existsSync(path.join(ROOT, 'results', d, mainRunOf(d) + '-dup'))).slice(-(POOL - 1)));
+type Lite = Map<string, { top: string; req?: string }>;
+const lite = (recs: Rec[] | undefined): Lite => new Map([...index(recs, 'base')].map(([k, n]) => [k, { top: n.top, req: n.req }]));
+const past = windowDates.map(d => { const r = mainRunOf(d)!; const m0 = loadRun(d, r); const d0 = dupDates.has(d) ? loadRun(d, r + '-dup') : new Map<string, Rec[]>();
+  return { date: d, main: new Map([...m0.keys()].map(m => [m, lite(m0.get(m))])), dup: new Map([...d0.keys()].map(m => [m, lite(d0.get(m))])) }; });
+const olderThanWindow = allDates.length > 0 && allDates[0] < (windowDates[0] ?? date);
 
 type Answers = Map<string, Norm>; // key `${item}|${qid}`
 function index(recs: Rec[] | undefined, variant: string): Answers {
@@ -42,16 +48,17 @@ function compare(a: Answers, b: Answers, filter?: (key: string, n: Norm) => bool
   return { n, flips, flip_rate: n ? flips / n : NaN, ci: [lo, hi], mean_tv: mean(tvs) };
 }
 // Per-question 0/1 flip indicators for the same comparisons `compare` summarizes (used for bootstrap intervals).
-function flips(a: Answers, b: Answers, crossRequest = false): number[] {
+function flips(a: Answers | Lite, b: Answers | Lite, crossRequest = false): number[] {
   const out: number[] = [];
   for (const [k, x] of a) { const y = b.get(k); if (!y) continue; if (x.req && y.req && x.req !== y.req && !crossRequest) continue; out.push(x.top !== y.top ? 1 : 0); }
   return out;
 }
-// Instability index: each change rate is divided by a fixed reference scale (the mean across models on Oct 28, 2026,
+// Instability index: each change rate is divided by a fixed reference scale (the mean across models on Oct 28, 2026;
+// time recalibrated Oct 29 when it became the decayed recent change;
 // frozen so a score moves only when the model's behavior does), then weighted. 100 = an average model; lower is better.
-// Over time counts only change above the model's own noise.
+// Over time is the decayed recent change (see recentChange) above the model's own noise.
 const WEIGHTS = { time: 0.4, repeat: 0.3, reorder: 0.15, reword: 0.15 };
-const SCALES = { time: 0.0075, repeat: 0.0175, reorder: 0.026, reword: 0.086 };
+const SCALES = { time: 0.0036, repeat: 0.0175, reorder: 0.026, reword: 0.086 };
 function stability(time: number[] | null, repeat: number[], reorder: number[], reword: number[]) {
   const avg = (xs: number[]) => xs.length ? xs.reduce((s, v) => s + v, 0) / xs.length : 0;
   const score = (t: number[] | null, r: number[], o: number[], w: number[]) => {
@@ -70,12 +77,36 @@ function stability(time: number[] | null, repeat: number[], reorder: number[], r
 const qType = (k: string) => { const [id, q] = k.split('|'); return itemById.get(id)!.questions[q]?.type; };
 const fam = (k: string) => itemById.get(k.split('|')[0])!.family;
 
-const pooledNoise = (m: string, base: Answers) => [...poolRuns.flatMap(r => r.dup.has(m) ? flips(r.main.get(m)!, r.dup.get(m)!) : []), ...flips(base, index(dup.get(m), 'base'))];
+const pooledNoise = (m: string, base: Answers) => [...past.flatMap(r => r.dup.has(m) && r.main.has(m) ? flips(r.main.get(m)!, r.dup.get(m)!) : []), ...flips(base, index(dup.get(m), 'base'))];
+const rateOf = (xs: number[]) => { const k = xs.reduce((a, v) => a + v, 0); const [lo, hi] = wilson(k, xs.length); return { n: xs.length, flips: k, flip_rate: xs.length ? k / xs.length : NaN, ci: [lo, hi] }; };
+// Recent change: today vs each of the last WINDOW days, weighted by exponential decay (half-life HALF_LIFE days)
+// shifted to reach zero at WINDOW. A day with no run uses the closest run; days before the model was first seen
+// are left out and the weights renormalized. Returns one weighted change value per question.
+function recentChange(m: string, base: Answers) {
+  const runs = past.filter(p => p.main.has(m)); if (!runs.length) return null;
+  const firstSeen = olderThanWindow && runs[0].date === past[0]?.date ? -Infinity : dayNum(runs[0].date);
+  const num = new Map<string, number>(), den = new Map<string, number>(), share = new Map<string, number>();
+  for (let k = 1; k <= WINDOW; k++) {
+    const target = dayNum(date) - k; if (target < firstSeen) continue;
+    const w = 2 ** (-k / HALF_LIFE) - 2 ** (-WINDOW / HALF_LIFE); if (w <= 0) continue;
+    const p = runs.reduce((best, r) => Math.abs(dayNum(r.date) - target) < Math.abs(dayNum(best.date) - target) ? r : best);
+    share.set(p.date, (share.get(p.date) ?? 0) + w);
+    const old = p.main.get(m)!;
+    for (const [q, x] of base) { const y = old.get(q); if (!y || (x.req && y.req && x.req !== y.req)) continue;
+      num.set(q, (num.get(q) ?? 0) + w * (x.top !== y.top ? 1 : 0)); den.set(q, (den.get(q) ?? 0) + w); }
+  }
+  const per = [...den].map(([q, d]) => num.get(q)! / d); if (!per.length) return null;
+  const total = [...share.values()].reduce((a, v) => a + v, 0);
+  const avg = per.reduce((a, v) => a + v, 0) / per.length, sd = Math.sqrt(per.reduce((a, v) => a + (v - avg) ** 2, 0) / Math.max(1, per.length - 1));
+  return { per, summary: { n: per.length, rate: avg, ci: [Math.max(0, avg - 1.96 * sd / Math.sqrt(per.length)), avg + 1.96 * sd / Math.sqrt(per.length)], half_life_days: HALF_LIFE, window_days: WINDOW,
+    by_run: [...share].sort((a, b) => b[0].localeCompare(a[0])).map(([d, w]) => ({ date: d, weight: w / total, ...rateOf(flips(runs.find(r => r.date === d)!.main.get(m)!, base)) })) } };
+}
 const models = [...main.keys()].sort();
 const perModel: Record<string, any> = {};
 for (const m of models) {
   const recs = main.get(m)!;
   const base = index(recs, 'base');
+  const rc = recentChange(m, base);
   const ok = recs.filter(r => r.ok), lat = ok.map(r => r.latency_ms);
   const baseRecs = recs.filter(r => r.variant === 'base');
   const cost = recs.reduce((s, r) => s + Number(r.usage?.cost ?? 0), 0);
@@ -107,15 +138,16 @@ for (const m of models) {
     accuracy_by_type: Object.fromEntries(Object.entries(byType).map(([t, [c, n]]) => [t, { acc: c / n, n }])),
     ece, brier_noul: mean(brier), overconfidence: graded ? mean(conf) - correct / graded : NaN,
     noise: compare(base, index(dup.get(m), 'base')),
-    noise_pooled: dup.get(m) ? (() => { const xs = pooledNoise(m, base); const k = xs.reduce((a, v) => a + v, 0); const [lo, hi] = wilson(k, xs.length);
-      return { n: xs.length, flips: k, flip_rate: xs.length ? k / xs.length : NaN, ci: [lo, hi], runs: [...poolRuns.filter(r => r.dup.has(m)).map(r => r.date), date] }; })() : null,
+    noise_pooled: dup.get(m) ? { ...rateOf(pooledNoise(m, base)), runs: [...past.filter(r => r.dup.has(m)).map(r => r.date), date] } : null,
     noise_same_provider: compare(base, index(dup.get(m), 'base'), (k, x) => x.provider === index(dup.get(m), 'base').get(k)?.provider),
     noise_cross_provider: compare(base, index(dup.get(m), 'base'), (k, x) => { const y = index(dup.get(m), 'base').get(k); return !!y && x.provider !== y.provider; }),
     shuffle: compare(base, index(recs, 'shuffle'), undefined, true),
     paraphrase: compare(base, index(recs, 'para'), undefined, true),
     drift_vs_compare: cmp.size ? compare(index(cmp.get(m), 'base'), base) : null,
+    drift_vs_previous: (() => { const p = past.filter(r => r.main.has(m)).at(-1); return p ? { date: p.date, ...rateOf(flips(p.main.get(m)!, base)) } : null; })(),
+    drift_recent: rc?.summary ?? null,
     stability: (() => { const dupBase = index(dup.get(m), 'base'); if (!dupBase.size) return null;
-      return stability(cmp.size && cmp.get(m) ? flips(index(cmp.get(m), 'base'), base) : null, pooledNoise(m, base), flips(base, index(recs, 'shuffle'), true), flips(base, index(recs, 'para'), true)); })(),
+      return stability(rc?.per ?? null, pooledNoise(m, base), flips(base, index(recs, 'shuffle'), true), flips(base, index(recs, 'para'), true)); })(),
     drift_by_type: cmp.size ? Object.fromEntries(['noul', 'choice', 'score'].map(t => [t, compare(index(cmp.get(m), 'base'), base, k => qType(k) === t)])) : null,
   };
 }
