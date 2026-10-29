@@ -191,6 +191,25 @@ code{font-size:.92em;background:var(--soft);padding:.05em .3em;border-radius:3px
 .rk-v{font-weight:700;font-size:15px}
 .rk-sep{border-top:1px dashed var(--faint);margin:6px 0 6px 2.2rem;opacity:.6}
 h2.sect{font-size:28px;margin:52px 0 6px}.dek.small{font-size:16px;margin-bottom:16px}
+.rk-top{display:flex;justify-content:space-between;align-items:baseline;gap:12px}
+.wm{font-size:13px;font-weight:700;color:var(--faint);letter-spacing:.01em;white-space:nowrap}
+.callout{border-left:3px solid var(--hot);padding:6px 0 6px 12px;margin:0 0 18px;font-size:15px;color:var(--ink)}
+.rk-bar-top{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-end;gap:10px 16px;border-bottom:1px solid var(--rule);margin:6px 0 14px}
+.rk-tabs{display:flex;flex-wrap:wrap;gap:0}
+.rk-tabs button{font:inherit;font-size:15px;color:var(--muted);background:none;border:0;border-bottom:2px solid transparent;padding:8px 12px 7px;margin-bottom:-1px;cursor:pointer}
+.rk-tabs button:first-child{padding-left:0}
+.rk-tabs button[aria-selected="true"]{color:var(--ink);font-weight:600;border-bottom-color:var(--ink)}
+.rk-tabs button:hover{color:var(--ink)}
+.rk-tools{display:flex;gap:6px;padding-bottom:6px}
+.rk-tools button{font:inherit;font-size:13px;color:var(--ink);background:var(--bg);border:1px solid var(--rule);border-radius:4px;padding:4px 10px;cursor:pointer}
+.rk-tools button:hover{border-color:var(--faint)}.rk-tools button[aria-pressed="true"]{background:var(--soft)}
+button:focus-visible{outline:2px solid var(--link);outline-offset:2px}
+.rk-sub{color:var(--muted);font-size:15px;margin:0 0 10px}
+.rk-nm .flag{display:block;font-style:normal;font-size:12px;font-weight:600;color:var(--hot)}
+.rk-bar .stack.over::after{content:"";position:absolute;right:-1px;top:-2px;bottom:-2px;width:6px;background:repeating-linear-gradient(135deg,var(--bg) 0 2px,transparent 2px 4px)}
+.rk-bar .seg.zero{width:2px;background:var(--faint)}
+.rk-table{margin:4px 0 0}
+.toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:7px 14px;border-radius:5px;font-size:14px;margin:0;z-index:9}
 /* tables */
 table{border-collapse:collapse;width:100%;font-size:15px}
 th{color:var(--faint);font-weight:600;font-size:13px;text-align:right;padding:8px 10px;border-bottom:1px solid var(--rule);white-space:nowrap}
@@ -224,6 +243,8 @@ footer.site a{color:var(--faint)}
  .rk-row{grid-template-columns:1.8rem minmax(0,1fr) 3rem;grid-template-areas:'n nm v' 'n bar bar';padding:6px 0}
  .rk-n{grid-area:n;align-self:start}.rk-nm{grid-area:nm}.rk-v{grid-area:v}.rk-bar{grid-area:bar}
  .rk-sep{margin-left:1.8rem}
+ .rk-tabs button,.rk-tabs button:first-child{padding:8px 16px 7px 0}
+ .rk-top .wm{display:none}
  .dc-row{grid-template-columns:1fr;gap:2px;padding:8px 0;border-bottom:1px solid var(--soft)}
  .dc-row .nm{text-align:left}
  .stats{grid-template-columns:repeat(2,minmax(0,1fr))}
@@ -236,7 +257,7 @@ footer.site a{color:var(--faint)}
 const TIP_JS = `const t=document.getElementById('tip');function show(el){t.textContent=el.dataset.tip;t.style.display='block';const r=el.getBoundingClientRect();t.style.left=Math.max(8,Math.min(innerWidth-290,r.left))+'px';t.style.top=(r.top-40)+'px'}
 document.querySelectorAll('[data-tip]').forEach(el=>{el.addEventListener('mouseenter',()=>show(el));el.addEventListener('focus',()=>show(el));el.addEventListener('mouseleave',()=>t.style.display='none');el.addEventListener('blur',()=>t.style.display='none')});`;
 
-const NAV: [string, string][] = [['/models/', 'Models'], ['/posts/', 'Findings'], ['/method/', 'Method'], ['/data/', 'Data']];
+const NAV: [string, string][] = [['/models/', 'Models'], ['/changes/', 'Changes'], ['/posts/', 'Findings'], ['/method/', 'Method'], ['/data/', 'Data']];
 function page(p: { path: string; title: string; description: string; body: string }) {
   const full = p.path === '/' ? 'Decision Drift: daily answer drift in decision models' : `${p.title} · Decision Drift`;
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -273,13 +294,12 @@ const scaleMax = Math.max(0.04, Math.ceil((Math.max(...ordered.map(m => drift(m,
 const xPct = (v: number) => (100 * Math.min(v, scaleMax) / scaleMax).toFixed(2) + '%';
 const ticks = Array.from({ length: Math.round(scaleMax / 0.02) + 1 }, (_, i) => i * 0.02);
 const jev = latest.jev_113_vs_114;
-const flagged = ordered.filter(m => verdict(m).key === 'changed');
 
 // ---------- stability ranking ----------
 const COMP = [['time', 'Over time'], ['repeat', 'On repeat'], ['reorder', 'Option order'], ['reword', 'Rewording']] as const;
 const MIN_RUNS = 7;
 const runsOf = (m: string) => history(m).length;
-const ranked = compared.filter(m => latest.perModel[m].stability).sort((a, b) => latest.perModel[a].stability.per_1000 - latest.perModel[b].stability.per_1000);
+const ranked = compared.filter(m => latest.perModel[m].stability).sort((a, b) => latest.perModel[a].stability.index - latest.perModel[b].stability.index);
 // groups: a model joins the current group while its interval overlaps the group leader's
 const groupOf = new Map<string, number>(); { let g = 0, leaderHi = -Infinity;
   for (const m of ranked) { const st = latest.perModel[m].stability; if (st.ci[0] > leaderHi) { g++; leaderHi = st.ci[1]; } groupOf.set(m, g); } }
@@ -288,20 +308,97 @@ const maxRuns = Math.max(...ranked.map(runsOf));
 const provisional = maxRuns < MIN_RUNS;
 // one run per day from here, so the ranking firms up MIN_RUNS - maxRuns days after the latest run
 const finalOn = new Date(new Date(latest.date + 'T00:00:00Z').getTime() + 864e5 * Math.max(0, MIN_RUNS - maxRuns)).toISOString().slice(0, 10);
-const rankMax = Math.ceil(Math.max(...ranked.map(m => latest.perModel[m].stability.ci[1])) / 10) * 10;
-const w = (v: number) => (100 * v / rankMax).toFixed(2) + '%';
-const rankChart = `<div class="rk" role="table" aria-label="Stability ranking: answer changes per 1,000 decisions, lower is better">
-<div class="rk-head" role="row"><span role="columnheader">Rank</span><span role="columnheader">Model</span><span role="columnheader" class="rk-axis">${[0, rankMax / 2, rankMax].map((t, i) => `<i style="left:${(i * 50)}%">${t}</i>`).join('')}</span><span role="columnheader">Per 1,000</span></div>
-${ranked.map((m, i) => {
-  const st = latest.perModel[m].stability; const c = st.components; const newGroup = i > 0 && groupOf.get(m) !== groupOf.get(ranked[i - 1]);
-  const segs = COMP.map(([k, label]) => { const v = 1000 * st.weights[k] * c[k]; return v > 0.05 ? `<span class="seg s-${k}" style="width:${w(v)}" title="${label}: ${v.toFixed(1)}"></span>` : ''; }).join('');
-  const tip = `${nameOf(m)}: ${st.per_1000.toFixed(1)} per 1,000 (95% CI ${st.ci[0].toFixed(1)}–${st.ci[1].toFixed(1)}). ` + COMP.map(([k, label]) => `${label} ${(1000 * st.weights[k] * c[k]).toFixed(1)}`).join(', ');
-  const fewRuns = !provisional && runsOf(m) < MIN_RUNS;
-  return `${newGroup ? '<div class="rk-sep" role="presentation"></div>' : ''}<div class="rk-row" role="row"><span class="rk-n" role="cell">${i + 1}</span><a class="rk-nm" role="cell" href="/models/${slug(m)}/"><b>${esc(nameOf(m))}</b><small>${esc(vendorName(m))}${fewRuns ? ', provisional' : ''}</small></a>
-<span class="rk-bar" role="cell"><span class="stack" tabindex="0" data-tip="${esc(tip)}" aria-label="${esc(tip)}">${segs}</span><span class="whisk" style="left:${w(st.ci[0])};width:calc(${w(st.ci[1])} - ${w(st.ci[0])})"></span></span><span class="rk-v" role="cell">${st.per_1000.toFixed(0)}</span></div>`;
-}).join('')}</div>`;
-const rankLegend = `<div class="key">${COMP.map(([k, label]) => `<span><i class="sw s-${k}"></i>${label} (${Math.round(latest.perModel[ranked[0]].stability.weights[k] * 100)}%)</span>`).join('')}<span><i class="k-whisk"></i>95% interval</span></div>`;
+const stOf = (m: string) => latest.perModel[m].stability;
 
+// A panel is one ranked bar list. Values beyond the axis (one extreme outlier) run to the edge and are marked.
+type Seg = { k: string; v: number };
+type PanelRow = { m: string; rank: number; segs: Seg[]; value: number; label: string; ci?: number[]; sep: boolean; flag: boolean; tip: string };
+type Panel = { id: string; tab: string; title: string; sub: string; unit: string; rows: PanelRow[]; max: number; ticks: number[] };
+const niceStep = (max: number) => { const raw = max / 4; const p = 10 ** Math.floor(Math.log10(raw)); return [1, 2, 2.5, 5, 10].map(f => f * p).find(s => s >= raw)!; };
+function axisFor(vals: number[]) {
+  const s = vals.slice().sort((a, b) => b - a);
+  const top = s[0] > 1.5 * s[1] ? s[1] : s[0]; // let a lone outlier overflow instead of squashing everyone else
+  const step = niceStep(top); const max = Math.ceil(top / step) * step;
+  return { max, ticks: Array.from({ length: Math.round(max / step) + 1 }, (_, i) => +(i * step).toFixed(6)) };
+}
+const flagged = new Set(ordered.filter(m => verdict(m).key === 'changed'));
+const overall: Panel = (() => {
+  const ax = axisFor(ranked.map(m => stOf(m).ci[1]));
+  return { id: 'overall', tab: 'Overall', title: 'Most stable decision models', sub: 'Instability index, lower is better. 100 = an average model.', unit: '', max: ax.max, ticks: ax.ticks,
+    rows: ranked.map((m, i) => { const st = stOf(m);
+      return { m, rank: i + 1, segs: COMP.map(([k]) => ({ k, v: st.parts[k] })), value: st.index, label: st.index.toFixed(0), ci: st.ci,
+        sep: i > 0 && groupOf.get(m) !== groupOf.get(ranked[i - 1]), flag: flagged.has(m),
+        tip: `${nameOf(m)}: ${st.index.toFixed(0)} (95% CI ${st.ci[0].toFixed(0)}–${st.ci[1].toFixed(0)}). ` + COMP.map(([k, l]) => `${l} ${st.parts[k].toFixed(0)}`).join(', ') };
+    }) };
+})();
+const compPanels: Panel[] = COMP.map(([k, label]) => {
+  const ms = ranked.slice().sort((a, b) => stOf(a).components[k] - stOf(b).components[k]);
+  const ax = axisFor(ms.map(m => 100 * stOf(m).components[k]));
+  const sub = { time: "Share of answers changed since Oct 20, beyond the model's own noise.", repeat: 'Share of answers that change when the same request is sent twice, minutes apart.', reorder: 'Share of pick-one answers that change when the options are reordered.', reword: 'Share of answers that change when the instructions are reworded with the same meaning.' }[k];
+  return { id: k, tab: label, title: `${label}`, sub, unit: '%', max: ax.max, ticks: ax.ticks,
+    rows: ms.map((m, i) => { const v = 100 * stOf(m).components[k];
+      // equal shown values share a rank
+      const rank = 1 + ms.filter(o => (100 * stOf(o).components[k]).toFixed(1) < v.toFixed(1) && 100 * stOf(o).components[k] < v).length;
+      return { m, rank, segs: [{ k, v }], value: v, label: v.toFixed(1) + '%', sep: false, flag: k === 'time' && flagged.has(m), tip: `${nameOf(m)}: ${v.toFixed(1)}%` }; }) };
+});
+const panels = [overall, ...compPanels];
+
+function panelHtml(p: Panel, active: boolean) {
+  const w = (v: number) => (100 * Math.min(v, p.max) / p.max).toFixed(2) + '%';
+  return `<div class="rk-panel" id="panel-${p.id}" role="tabpanel" aria-labelledby="tab-${p.id}"${active ? '' : ' hidden'}>
+<p class="rk-sub">${esc(p.sub)}</p>
+${p.id === 'overall' ? `<div class="key">${COMP.map(([k, l]) => `<span><i class="sw s-${k}"></i>${l} (${Math.round(stOf(ranked[0]).weights[k] * 100)}%)</span>`).join('')}<span><i class="k-whisk"></i>95% interval</span></div>` : ''}
+<div class="rk" role="table" aria-label="${esc(p.title + '. ' + p.sub)}">
+<div class="rk-head" role="row"><span role="columnheader">Rank</span><span role="columnheader">Model</span><span role="columnheader" class="rk-axis">${p.ticks.map(t => `<i style="left:${w(t)}">${t}${p.unit}</i>`).join('')}</span><span role="columnheader">${p.id === 'overall' ? 'Index' : 'Rate'}</span></div>
+${p.rows.map(r => {
+  const over = r.value > p.max;
+  let used = 0; const segs = r.segs.filter(s => s.v > 0.05).map(s => { const room = Math.max(0, p.max - used); const v = Math.min(s.v, room); used += s.v; return v > 0 ? `<span class="seg s-${s.k}" style="width:${w(v)}"></span>` : ''; }).join('');
+  return `${r.sep ? '<div class="rk-sep" role="presentation"></div>' : ''}<div class="rk-row" role="row"><span class="rk-n" role="cell">${r.rank}</span><a class="rk-nm" role="cell" href="/models/${slug(r.m)}/"><b>${esc(nameOf(r.m))}</b><small>${esc(vendorName(r.m))}</small>${r.flag ? '<em class="flag">▲ changed beyond noise</em>' : ''}</a>
+<span class="rk-bar" role="cell"><span class="stack${over ? ' over' : ''}" tabindex="0" data-tip="${esc(r.tip)}" aria-label="${esc(r.tip)}">${segs || '<span class="seg zero"></span>'}</span>${r.ci ? `<span class="whisk" style="left:${w(r.ci[0])};width:calc(${w(r.ci[1])} - ${w(r.ci[0])})"></span>` : ''}</span><span class="rk-v" role="cell">${r.label}</span></div>`;
+}).join('')}</div></div>`;
+}
+const rankTable = `<div class="rk-table" id="rk-table" hidden><table><thead><tr><th>#</th><th class="l">Model</th><th>Index</th><th class="opt">95% CI</th>${COMP.map(([, l]) => `<th>${l}</th>`).join('')}</tr></thead><tbody>${ranked.map((m, i) => { const st = stOf(m);
+  return `<tr><td>${i + 1}</td><td class="l"><a href="/models/${slug(m)}/">${esc(nameOf(m))}</a></td><td><b>${st.index.toFixed(0)}</b></td><td class="opt">${st.ci[0].toFixed(0)}–${st.ci[1].toFixed(0)}</td>${COMP.map(([k]) => `<td>${pct(st.components[k])}</td>`).join('')}</tr>`; }).join('')}</tbody></table><p class="note">Component columns are raw shares of answers that changed. The index divides each by a fixed reference rate (Over time 0.75%, On repeat 1.75%, Option order 2.6%, Rewording 8.6%) and weights them 40/30/15/15.</p></div>`;
+// data the PNG export draws from (only what is on screen)
+const exportData = { date: latest.date, provisional, panels: panels.map(p => ({ id: p.id, title: p.title, sub: p.sub, unit: p.unit, max: p.max, ticks: p.ticks,
+  rows: p.rows.map(r => ({ rank: r.rank, name: nameOf(r.m), vendor: vendorName(r.m), segs: r.segs, value: r.value, label: r.label, ci: r.ci ?? null, sep: r.sep, flag: r.flag })) })) };
+
+const RANK_JS = `(()=>{const tabs=[...document.querySelectorAll('.rk-tabs [role=tab]')];const panels=[...document.querySelectorAll('.rk-panel')];const table=document.getElementById('rk-table');const tbtn=document.getElementById('rk-tablebtn');
+function select(id,push){tabs.forEach(t=>{const on=t.dataset.id===id;t.setAttribute('aria-selected',on);t.tabIndex=on?0:-1});panels.forEach(p=>p.hidden=p.id!=='panel-'+id||!table.hidden);if(push)history.replaceState(null,'',id==='overall'?location.pathname:'#'+id)}
+tabs.forEach((t,i)=>{t.addEventListener('click',()=>select(t.dataset.id,true));t.addEventListener('keydown',e=>{if(e.key==='ArrowRight'||e.key==='ArrowLeft'){const n=tabs[(i+(e.key==='ArrowRight'?1:tabs.length-1))%tabs.length];n.focus();select(n.dataset.id,true)}})});
+const h=location.hash.slice(1);if(tabs.some(t=>t.dataset.id===h))select(h,false);
+tbtn.addEventListener('click',()=>{table.hidden=!table.hidden;tbtn.setAttribute('aria-pressed',!table.hidden);tbtn.textContent=table.hidden?'Table':'Chart';const cur=tabs.find(t=>t.getAttribute('aria-selected')==='true').dataset.id;panels.forEach(p=>p.hidden=!table.hidden||p.id!=='panel-'+cur)});
+const toast=m=>{const n=document.getElementById('rk-toast');n.textContent=m;n.hidden=false;setTimeout(()=>n.hidden=true,2200)};
+document.getElementById('rk-link').addEventListener('click',async()=>{try{await navigator.clipboard.writeText(location.href);toast('Link copied')}catch(e){toast('Copy failed; use the address bar')}});
+document.getElementById('rk-png').addEventListener('click',()=>{const D=JSON.parse(document.getElementById('rk-data').textContent);const cur=tabs.find(t=>t.getAttribute('aria-selected')==='true').dataset.id;const P=D.panels.find(p=>p.id===cur);
+const cs=getComputedStyle(document.documentElement);const v=n=>cs.getPropertyValue(n).trim();const s=2,W=1200,rowH=34,top=150,left=330,right=110,H=top+P.rows.length*rowH+P.rows.filter(r=>r.sep).length*10+70;
+const c=document.createElement('canvas');c.width=W*s;c.height=H*s;const g=c.getContext('2d');g.scale(s,s);g.fillStyle=v('--bg');g.fillRect(0,0,W,H);
+g.fillStyle=v('--ink');g.font='600 30px Newsreader, Georgia, serif';g.fillText(P.title,40,58);g.fillStyle=v('--muted');g.font='400 16px "Public Sans", sans-serif';g.fillText(P.sub+(D.provisional?' Provisional.':''),40,88);
+const x0=left,xw=W-left-right,X=val=>x0+xw*Math.min(val,P.max)/P.max;g.font='400 12px "Public Sans", sans-serif';g.fillStyle=v('--faint');P.ticks.forEach(t=>{g.textAlign='center';g.fillText(t+P.unit,X(t),top-14)});
+g.strokeStyle=v('--rule');g.beginPath();g.moveTo(x0,top-6);g.lineTo(x0+xw,top-6);g.stroke();let y=top;
+P.rows.forEach(r=>{if(r.sep){g.setLineDash([3,3]);g.strokeStyle=v('--faint');g.beginPath();g.moveTo(40,y+2);g.lineTo(W-40,y+2);g.stroke();g.setLineDash([]);y+=10}
+g.textAlign='right';g.fillStyle=v('--faint');g.font='400 14px "Public Sans", sans-serif';g.fillText(r.rank,64,y+21);g.textAlign='left';g.fillStyle=v('--ink');g.font='600 15px "Public Sans", sans-serif';g.fillText(r.name,80,y+21);
+const nw=g.measureText(r.name).width;g.fillStyle=v('--faint');g.font='400 12px "Public Sans", sans-serif';g.fillText(r.vendor,86+nw,y+21);
+let xs=x0;r.segs.forEach(sg=>{if(sg.v<=0.05)return;const w=Math.max(0,Math.min(X(sg.v+(xs-x0)/xw*P.max),x0+xw)-xs);g.fillStyle=v('--c-'+sg.k);g.fillRect(xs,y+9,Math.max(0,w-2),14);xs+=w});
+if(r.ci){g.fillStyle=v('--ink');g.globalAlpha=.55;g.fillRect(X(r.ci[0]),y+26,X(r.ci[1])-X(r.ci[0]),2);g.globalAlpha=1}
+g.textAlign='right';g.fillStyle=r.flag?v('--hot'):v('--ink');g.font='700 15px "Public Sans", sans-serif';g.fillText(r.label,W-40,y+21);y+=rowH});
+g.textAlign='left';g.fillStyle=v('--faint');g.font='400 13px "Public Sans", sans-serif';g.fillText('Run of '+D.date+'. Same inputs every day; lower is better.',40,H-28);g.textAlign='right';g.font='700 15px "Public Sans", sans-serif';g.fillStyle=v('--ink');g.fillText('decisiondrift.dev',W-40,H-28);
+const a=document.createElement('a');a.download='decision-drift-'+P.id+'-'+D.date+'.png';a.href=c.toDataURL('image/png');a.click();toast('Image saved')});})();`;
+
+const rankSection = `<section class="rk-wrap" aria-labelledby="rk-title">
+<div class="rk-top"><h1 id="rk-title">Most stable decision models</h1><span class="wm" aria-hidden="true">decisiondrift.dev</span></div>
+<p class="dek">${ranked.length} models. The same ${latest.items} inputs and ${(manifest.splits.public.questions + manifest.splits.private.questions).toLocaleString()} questions, every day.</p>
+${provisional ? `<p class="prov">Provisional: ${maxRuns} daily runs so far. Final after ${MIN_RUNS}, on ${shortDate(finalOn)}.</p>` : ''}
+${flagged.size ? `<p class="callout"><b>Changed beyond noise since Oct 20:</b> ${[...flagged].map(m => `<a href="/models/${slug(m)}/">${esc(nameOf(m))}</a> ${pct(drift(m, latest)!.flip_rate)}${notes(m).includes('Same snapshot ID.') ? ' (same snapshot ID)' : ''}`).join(', ')}. <a href="/changes/">All changes</a>.</p>` : ''}
+<div class="rk-bar-top"><div class="rk-tabs" role="tablist" aria-label="Ranking view">${panels.map((p, i) => `<button type="button" role="tab" id="tab-${p.id}" data-id="${p.id}" aria-controls="panel-${p.id}" aria-selected="${i === 0}" tabindex="${i === 0 ? 0 : -1}">${esc(p.tab)}</button>`).join('')}</div>
+<div class="rk-tools"><button type="button" id="rk-link">Copy link</button><button type="button" id="rk-png">Download image</button><button type="button" id="rk-tablebtn" aria-pressed="false">Table</button></div></div>
+${panels.map((p, i) => panelHtml(p, i === 0)).join('')}
+${rankTable}
+<p class="foot">Lines separate groups whose intervals don't overlap. Over time counts only change beyond the model's own noise. <a href="/method/#stability">How the index works</a>. ${lastRunLine()}</p>
+<p id="rk-toast" class="toast" role="status" hidden></p>
+<script type="application/json" id="rk-data">${JSON.stringify(exportData).replace(/</g, '\\u003c')}</script>
+<script>${RANK_JS}</script>
+</section>`;
 
 const chart = `<div class="dc" role="group" aria-label="Share of answers changed since Oct 20, per model, with each model's noise">
 <div class="dc-axis" aria-hidden="true"><span></span><div class="ticks">${ticks.map(t => `<span style="left:${xPct(t)}">${Math.round(t * 100)}%</span>`).join('')}</div><span></span></div>
@@ -313,36 +410,33 @@ const chart = `<div class="dc" role="group" aria-label="Share of answers changed
 <div class="nt">${notes(m).map(esc).join(' ')}</div></li>`;
 }).join('')}</ol></div>`;
 
-write('index.html', page({ path: '/', title: 'Tracker', description: 'Daily measurements of how often decision models such as Jev, Clef and Decider change their answers.', body: `
-<h1>Most stable decision models</h1>
-<p class="dek">Answer changes per 1,000 decisions, lower is better. ${ranked.length} models, the same ${latest.items} inputs and ${(manifest.splits.public.questions + manifest.splits.private.questions).toLocaleString()} questions every day.</p>
-${provisional ? `<p class="prov">Provisional: ${maxRuns} daily runs so far. Final after ${MIN_RUNS}, on ${shortDate(finalOn)}.</p>` : ''}
-${rankLegend}
-${rankChart}
-<p class="foot">Lines separate groups whose intervals don't overlap; models within a group aren't meaningfully different. Over time counts only change beyond the model's own noise. <a href="/method/#stability">How the score works</a>.</p>
-<h2 class="serif sect">Answers changed since Oct 20</h2>
-<p class="dek small">Each model against its own first run.</p>
+write('index.html', page({ path: '/', title: 'Most stable decision models', description: 'Daily ranking of decision models (Jev, Clef, Decider, Luna and more) by how often their answers change.', body: `
+${rankSection}
+${jev ? `<h2>Jev 1.14 vs 1.13</h2><p>Different top answer on ${pct(jev.overall.flip_rate)} of questions (95% CI ${ci(jev.overall.ci)}). Score answers: ${pct(jev.by_type.score.flip_rate)}. <code>~typesafe/jev-latest</code> serves 1.14. <a href="/findings/jev-1-13-vs-1-14/">Breakdown</a>.</p>` : ''}
+${posts.length ? `<h2>Findings</h2><ul class="posts">${posts.slice(0, 3).map(p => `<li><a href="/posts/${p.slug}/">${esc(p.title)}</a><div class="when">${dateLong(p.date)}</div></li>`).join('')}</ul>` : ''}
+` }));
+
+write('changes/index.html', page({ path: '/changes/', title: 'Answers changed since Oct 20', description: 'How many of each decision model\'s answers changed since its first run, against its own noise.', body: `
+<div class="rk-top"><h1>Answers changed since Oct 20</h1><span class="wm" aria-hidden="true">decisiondrift.dev</span></div>
+<p class="dek">${compared.length} models, each against its own first run.</p>
 <div class="key"><span><i class="k-band"></i>Noise (same request, twice)</span><span><i class="k-dot"></i>Changed</span><span><i class="k-hot"></i>Changed beyond noise</span></div>
 ${chart}
 ${fresh.length ? `<p class="sub-list">New since Oct 20, no comparison yet: ${fresh.map(m => `<a href="/models/${slug(m)}/">${esc(nameOf(m))}</a>`).join(', ')}.</p>` : ''}
 ${aliases.length ? `<p class="sub-list">Aliases: ${aliases.map(m => `<a href="/models/${slug(m)}/">${esc(m)}</a> serves ${esc(latest.perModel[m].served.join(', ').replace(/^[^/]+\//, ''))}`).join('; ')}.</p>` : ''}
-<p class="foot">${lastRunLine()} Flagged: 95% interval above the model's noise. <a href="/method/">Method</a>.</p>
-${jev ? `<h2>Jev 1.14 vs 1.13</h2><p>Different top answer on ${pct(jev.overall.flip_rate)} of questions (95% CI ${ci(jev.overall.ci)}). Noise: ${pct(latest.perModel['typesafe/jev-1.13']?.noise.flip_rate)} and ${pct(latest.perModel['typesafe/jev-1.14']?.noise.flip_rate)}. Score answers: ${pct(jev.by_type.score.flip_rate)}. <code>~typesafe/jev-latest</code> serves 1.14. <a href="/findings/jev-1-13-vs-1-14/">Breakdown</a>.</p>` : ''}
-${posts.length ? `<h2>Findings</h2><ul class="posts">${posts.slice(0, 3).map(p => `<li><a href="/posts/${p.slug}/">${esc(p.title)}</a><div class="when">${dateLong(p.date)}</div></li>`).join('')}</ul>` : ''}
-` }));
+<p class="foot">${lastRunLine()} Flagged: 95% interval above the model's noise. <a href="/method/">Method</a>.</p>` }));
 
 // models table
 const modelRow = (m: string) => {
   const p = latest.perModel[m]; const d = drift(m, latest); const hot = verdict(m).key === 'changed';
   const rk = rankOf.get(m); const st = p.stability;
   return `<tr><td class="num-rank">${rk ?? ''}</td><td class="l"><a href="/models/${slug(m)}/">${esc(isAlias(m) ? m : nameOf(m))}</a><small>${esc(isAlias(m) ? 'serves ' + p.served.join(', ') : vendorName(m))}</small></td>
-<td>${rk && st ? `<b>${st.per_1000.toFixed(0)}</b>` : '—'}</td><td class="${hot ? 'hot' : ''}">${d?.n ? pct(d.flip_rate) : '—'}${hot ? '<small class="hot">beyond noise</small>' : ''}</td><td>${pct(p.noise.flip_rate)}</td><td class="opt">${pct(p.shuffle.flip_rate)}</td><td class="opt">${pct(p.paraphrase.flip_rate)}</td>
+<td>${rk && st ? `<b>${st.index.toFixed(0)}</b>` : '—'}</td><td class="${hot ? 'hot' : ''}">${d?.n ? pct(d.flip_rate) : '—'}${hot ? '<small class="hot">beyond noise</small>' : ''}</td><td>${pct(p.noise.flip_rate)}</td><td class="opt">${pct(p.shuffle.flip_rate)}</td><td class="opt">${pct(p.paraphrase.flip_rate)}</td>
 <td>${pct(p.accuracy)}<small>${ci(p.accuracy_ci)}</small></td><td class="opt">${ms(p.latency_p50)}</td></tr>`;
 };
-const tableHead = `<thead><tr><th>#</th><th class="l">Model</th><th>Per 1,000</th><th>Changed<span class="long"> since Oct 20</span></th><th>Noise</th><th class="opt">Option shuffle</th><th class="opt">Paraphrase</th><th>Gold<span class="long"> accuracy</span></th><th class="opt">Median latency</th></tr></thead>`;
+const tableHead = `<thead><tr><th>#</th><th class="l">Model</th><th>Index</th><th>Changed<span class="long"> since Oct 20</span></th><th>Noise</th><th class="opt">Option shuffle</th><th class="opt">Paraphrase</th><th>Gold<span class="long"> accuracy</span></th><th class="opt">Median latency</th></tr></thead>`;
 const byVendor = (a: string, b: string) => vendorName(a).localeCompare(vendorName(b)) || nameOf(a).localeCompare(nameOf(b));
 write('models/index.html', page({ path: '/models/', title: 'Models', description: 'Drift, noise, robustness, accuracy and latency for every tracked decision model.', body: `
-<h1>Models</h1><p class="dek">Latest run, ${shortDate(latest.date)}. Ranked by answer changes per 1,000 decisions${provisional ? ' (provisional)' : ''}. Other columns are shares of top answers. Gold accuracy covers the clearer questions only.</p>
+<h1>Models</h1><p class="dek">Latest run, ${shortDate(latest.date)}. Ranked by instability index, lower is better${provisional ? ' (provisional)' : ''}. Other columns are shares of top answers. Gold accuracy covers the clearer questions only.</p>
 <table class="tbl-models">${tableHead}<tbody>${[...ranked, ...tracked.filter(m => !rankOf.has(m)).sort(byVendor)].map(modelRow).join('')}</tbody></table>
 ${aliases.length ? `<h2>Aliases</h2><table class="tbl-models">${tableHead}<tbody>${aliases.map(modelRow).join('')}</tbody></table>` : ''}
 <h2>Not tracked</h2><ul>${Object.entries(excluded).map(([m, why]) => `<li><code>${esc(m)}</code>: ${esc(why)}</li>`).join('')}</ul>` }));
@@ -376,14 +470,14 @@ for (const m of models) {
 <p class="crumb"><a href="/models/">Models</a> / ${esc(isAlias(m) ? 'Aliases' : vendorName(m))}</p>
 <h1>${esc(isAlias(m) ? m : nameOf(m))}</h1>
 <p class="meta">${isAlias(m) ? `Alias. Serves ${esc(last.served.join(', '))}.` : `Snapshot ${esc(last.served.join(', '))}. Served by ${esc(last.providers.join(', '))}.`}</p>
-<div class="stats"><div><b>${rankOf.has(m) ? `#${rankOf.get(m)} of ${ranked.length}` : '—'}</b><span>${rankOf.has(m) ? `stability, ${last.stability.per_1000.toFixed(0)} per 1,000${provisional || runsOf(m) < MIN_RUNS ? ', provisional' : ''}` : 'not ranked yet'}</span></div><div><b class="${hot ? 'hot' : ''}">${d?.n ? pct(d.flip_rate) : '—'}</b><span>changed since Oct 20</span></div><div><b>${pct(last.noise.flip_rate)}</b><span>noise</span></div><div><b>${pct(last.accuracy)}</b><span>gold accuracy</span></div></div>
+<div class="stats"><div><b>${rankOf.has(m) ? `#${rankOf.get(m)} of ${ranked.length}` : '—'}</b><span>${rankOf.has(m) ? `stability, index ${last.stability.index.toFixed(0)}${provisional || runsOf(m) < MIN_RUNS ? ', provisional' : ''}` : 'not ranked yet'}</span></div><div><b class="${hot ? 'hot' : ''}">${d?.n ? pct(d.flip_rate) : '—'}</b><span>changed since Oct 20</span></div><div><b>${pct(last.noise.flip_rate)}</b><span>noise</span></div><div><b>${pct(last.accuracy)}</b><span>gold accuracy</span></div></div>
 <h2>Daily runs</h2>
 <div class="days" role="img" aria-label="One square per day since Oct 20">${squares}</div>
 <div class="days-axis"><span>${shortDate(dayList[0])}</span><span>${shortDate(dayList.at(-1)!)}</span></div>
 <div class="legend"><span><i class="d-base"></i>Baseline</span><span><i class="d-ok"></i>Within noise</span><span><i class="d-hot"></i>Changed beyond noise</span><span><i class="d-miss"></i>No run</span></div>
 <h2>Run history</h2>
 <table><thead><tr><th>Run</th>${snaps.length > 1 ? '<th class="l opt">Snapshot</th>' : ''}<th>Changed</th><th class="opt">95% CI</th><th>Noise</th><th class="opt">Shuffle</th><th class="opt">Paraphrase</th><th>Gold acc.</th><th class="opt">p50</th></tr></thead><tbody>${rows}</tbody></table>
-${rankOf.has(m) ? `<h2>Stability score</h2><table class="narrow"><thead><tr><th>Source</th><th>Answers changed</th><th>Weight</th><th>Per 1,000</th></tr></thead><tbody>${COMP.map(([k, label]) => `<tr><td><i class="sw-inline s-${k}"></i>${label}</td><td>${pct(last.stability.components[k])}</td><td>${Math.round(last.stability.weights[k] * 100)}%</td><td>${(1000 * last.stability.weights[k] * last.stability.components[k]).toFixed(1)}</td></tr>`).join('')}<tr><td><b>Total</b></td><td></td><td></td><td><b>${last.stability.per_1000.toFixed(1)}</b><small>${last.stability.ci[0].toFixed(1)}–${last.stability.ci[1].toFixed(1)}</small></td></tr></tbody></table><p class="note">Over time counts only change beyond this model's noise.</p>` : ''}
+${rankOf.has(m) ? `<h2>Instability index</h2><table class="narrow"><thead><tr><th>Source</th><th>Answers changed</th><th class="opt">Reference</th><th>Weight</th><th>Points</th></tr></thead><tbody>${COMP.map(([k, label]) => `<tr><td><i class="sw-inline s-${k}"></i>${label}</td><td>${pct(last.stability.components[k])}</td><td class="opt">${pct(last.stability.scales[k], 2)}</td><td>${Math.round(last.stability.weights[k] * 100)}%</td><td>${last.stability.parts[k].toFixed(1)}</td></tr>`).join('')}<tr><td><b>Index</b></td><td></td><td class="opt"></td><td></td><td><b>${last.stability.index.toFixed(1)}</b><small>${last.stability.ci[0].toFixed(0)}–${last.stability.ci[1].toFixed(0)}</small></td></tr></tbody></table><p class="note">Over time counts only change beyond this model's noise.</p>` : ''}
 ${types.length ? `<h2>Changed since Oct 20, by question type</h2><table class="narrow"><thead><tr><th>Type</th><th>Questions</th><th>Changed</th><th class="opt">95% CI</th></tr></thead><tbody>${types.map(([t, v]) => `<tr><td>${TYPE_NAME[t]}</td><td>${v.n}</td><td>${pct(v.flip_rate)}</td><td class="opt">${ci(v.ci)}</td></tr>`).join('')}</tbody></table>` : ''}
 ${last.providers.length > 1 && last.noise_cross_provider?.n ? `<h2>Providers</h2><p>Served by ${esc(last.providers.join(', '))}. Repeat requests that went to a different provider changed ${pct(last.noise_cross_provider.flip_rate)} of answers (${last.noise_cross_provider.n} questions); same provider: ${pct(last.noise_same_provider.flip_rate)} (${last.noise_same_provider.n}).</p>` : ''}
 ${last.errors ? `<h2>Errors, latest run</h2><p class="note">${last.errors} of ${last.requests} requests.</p><ul>${last.error_samples.map((s: string) => `<li><code>${esc(s)}</code></li>`).join('')}</ul>` : ''}
@@ -426,7 +520,7 @@ write('method/index.html', page({ path: '/method/', title: 'Method', description
 <li><strong>Latency, errors, cost:</strong> as measured by the runner, network included.</li>
 </ul>
 <h2 id="stability">Stability score</h2>
-<p>Answer changes per 1,000 decisions, lower is better. It combines four rates: change since Oct 20 beyond the model's noise (40%), change on repeat (30%), change when options are reordered (15%), and change when instructions are reworded (15%). Over time and on repeat weigh most because users can't fix them on their side. The 95% interval comes from resampling questions 1,000 times. Lines on the ranking separate groups whose intervals don't overlap the group leader's. Rankings are provisional until a model has ${MIN_RUNS} daily runs. Aliases and models without an Oct 20 baseline aren't ranked.</p>
+<p>Lower is better; 100 is an average model. Four change rates feed it: change since Oct 20 beyond the model's noise (40%), change on repeat (30%), change when options are reordered (15%), and change when instructions are reworded (15%). The rates sit on very different scales (rewording typically moves 8.6% of answers, drift beyond noise under 1%), so each is first divided by a fixed reference rate: the average across models on Oct 28, 2026 (0.75%, 1.75%, 2.6%, 8.6%). Without that step, rewording would decide most of the ranking whatever the weights. The references stay fixed, so a model's index moves only when its own behavior does. Over time and on repeat weigh most because users can't fix them on their side. The 95% interval comes from resampling questions 1,000 times. Lines on the ranking separate groups whose intervals don't overlap the group leader's. Rankings are provisional until a model has ${MIN_RUNS} daily runs. Aliases and models without an Oct 20 baseline aren't ranked.</p>
 <h2>Schedule and limits</h2>
 <p>Daily at 10:17 UTC through OpenRouter's decisions API, which is in alpha. Every response is stored raw. Intervals are 95% Wilson intervals. Models that can't answer Choice and Score questions are listed as not tracked.</p>
 </article>` }));
@@ -458,7 +552,7 @@ const feedItems = [
   ...reports.map(r => ({ title: `Daily run ${dateLong(r.date)}`, link: `${SITE}/models/`, date: r.date, desc: `${r.models} models measured.` })),
 ].sort((a, b) => b.date.localeCompare(a.date));
 fs.writeFileSync(path.join(OUT, 'feed.xml'), `<?xml version="1.0" encoding="UTF-8"?><rss version="2.0"><channel><title>Decision Drift</title><link>${SITE}/</link><description>Daily measurements of whether decision models change their answers.</description>${feedItems.map(i => `<item><title>${esc(i.title)}</title><link>${i.link}</link><guid isPermaLink="false">${esc(i.link + '#' + i.date)}</guid><pubDate>${new Date(i.date + 'T12:00:00Z').toUTCString()}</pubDate><description>${esc(i.desc)}</description></item>`).join('')}</channel></rss>`);
-const pages = ['/', '/models/', '/posts/', '/method/', '/data/', '/status/', ...models.map(m => `/models/${slug(m)}/`), ...(jev ? ['/findings/jev-1-13-vs-1-14/'] : []), ...posts.map(p => `/posts/${p.slug}/`)];
+const pages = ['/', '/changes/', '/models/', '/posts/', '/method/', '/data/', '/status/', ...models.map(m => `/models/${slug(m)}/`), ...(jev ? ['/findings/jev-1-13-vs-1-14/'] : []), ...posts.map(p => `/posts/${p.slug}/`)];
 fs.writeFileSync(path.join(OUT, 'sitemap.xml'), `<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${pages.map(p => `<url><loc>${SITE}${p}</loc></url>`).join('')}</urlset>`);
 fs.writeFileSync(path.join(OUT, 'robots.txt'), `User-agent: *\nAllow: /\nSitemap: ${SITE}/sitemap.xml\n`);
 fs.writeFileSync(path.join(OUT, 'llms.txt'), `# Decision Drift
@@ -466,11 +560,12 @@ fs.writeFileSync(path.join(OUT, 'llms.txt'), `# Decision Drift
 > An independent, daily tracker of decision models (typed-answer models such as TypeSafe Jev, Cloudflare Clef, Perplexity Decider, OpenAI Luna Decisions). Every compatible model on OpenRouter gets the same frozen probe suite every day; we report how many answers change versus the first run (Oct 20, 2026), each model's noise level, sensitivity to option order and paraphrase, gold-label accuracy and calibration, latency and errors.
 
 Latest run: ${latest.date}, ${latest.models} models, ${latest.items} states.
-Most stable${provisional ? ' (provisional)' : ''}, answer changes per 1,000 decisions: ${ranked.slice(0, 5).map(m => `${nameOf(m)} ${latest.perModel[m].stability.per_1000.toFixed(0)}`).join(', ')}. Least stable: ${ranked.slice(-2).map(m => `${nameOf(m)} ${latest.perModel[m].stability.per_1000.toFixed(0)}`).join(', ')}.
+Most stable${provisional ? ' (provisional)' : ''}, instability index (100 = average model, lower is better): ${ranked.slice(0, 5).map(m => `${nameOf(m)} ${stOf(m).index.toFixed(0)}`).join(', ')}. Least stable: ${ranked.slice(-2).map(m => `${nameOf(m)} ${stOf(m).index.toFixed(0)}`).join(', ')}.
 ${jev ? `Jev 1.13 vs 1.14: ${pct(jev.overall.flip_rate)} of top answers differ (95% CI ${ci(jev.overall.ci)}).` : ''}
 
 ## Pages
-- [Tracker](${SITE}/): answers changed since Oct 20 per model, against each model's noise
+- [Ranking](${SITE}/): most stable decision models, by instability index
+- [Changes](${SITE}/changes/): answers changed since Oct 20 per model, against each model's noise
 - [Models](${SITE}/models/): latest metrics table
 ${jev ? `- [Jev 1.13 vs 1.14](${SITE}/findings/jev-1-13-vs-1-14/): version comparison by question type and task family\n` : ''}- [Method](${SITE}/method/): suite design, metrics, limits
 ${posts.map(p => `- [${p.title}](${SITE}/posts/${p.slug}/): ${p.summary}`).join('\n')}

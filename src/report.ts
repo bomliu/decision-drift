@@ -38,20 +38,24 @@ function flips(a: Answers, b: Answers, crossRequest = false): number[] {
   for (const [k, x] of a) { const y = b.get(k); if (!y) continue; if (x.req && y.req && x.req !== y.req && !crossRequest) continue; out.push(x.top !== y.top ? 1 : 0); }
   return out;
 }
-// Stability: weighted answer changes per 1,000 decisions. Over time counts only change above the model's noise.
+// Instability index: each change rate is divided by a fixed reference scale (the mean across models on Oct 28, 2026,
+// frozen so a score moves only when the model's behavior does), then weighted. 100 = an average model; lower is better.
+// Over time counts only change above the model's own noise.
 const WEIGHTS = { time: 0.4, repeat: 0.3, reorder: 0.15, reword: 0.15 };
+const SCALES = { time: 0.0075, repeat: 0.0175, reorder: 0.026, reword: 0.086 };
 function stability(time: number[] | null, repeat: number[], reorder: number[], reword: number[]) {
   const avg = (xs: number[]) => xs.length ? xs.reduce((s, v) => s + v, 0) / xs.length : 0;
   const score = (t: number[] | null, r: number[], o: number[], w: number[]) => {
     const c = { time: t ? Math.max(0, avg(t) - avg(r)) : 0, repeat: avg(r), reorder: avg(o), reword: avg(w) };
-    return { c, per_1000: 1000 * (WEIGHTS.time * c.time + WEIGHTS.repeat * c.repeat + WEIGHTS.reorder * c.reorder + WEIGHTS.reword * c.reword) };
+    const parts = { time: 100 * WEIGHTS.time * c.time / SCALES.time, repeat: 100 * WEIGHTS.repeat * c.repeat / SCALES.repeat, reorder: 100 * WEIGHTS.reorder * c.reorder / SCALES.reorder, reword: 100 * WEIGHTS.reword * c.reword / SCALES.reword };
+    return { c, parts, index: parts.time + parts.repeat + parts.reorder + parts.reword };
   };
   const point = score(time, repeat, reorder, reword);
   // percentile bootstrap over questions, each component resampled independently, fixed seed
   const r = rng('stability'); const pick = (xs: number[]) => xs.map(() => xs[Math.floor(r() * xs.length)]);
   const boots: number[] = [];
-  for (let i = 0; i < 1000; i++) boots.push(score(time && pick(time), pick(repeat), pick(reorder), pick(reword)).per_1000);
-  return { per_1000: point.per_1000, ci: [quantile(boots, 0.025), quantile(boots, 0.975)], components: point.c, weights: WEIGHTS,
+  for (let i = 0; i < 1000; i++) boots.push(score(time && pick(time), pick(repeat), pick(reorder), pick(reword)).index);
+  return { index: point.index, ci: [quantile(boots, 0.025), quantile(boots, 0.975)], components: point.c, parts: point.parts, weights: WEIGHTS, scales: SCALES,
     n: { time: time?.length ?? 0, repeat: repeat.length, reorder: reorder.length, reword: reword.length } };
 }
 const qType = (k: string) => { const [id, q] = k.split('|'); return itemById.get(id)!.questions[q]?.type; };
