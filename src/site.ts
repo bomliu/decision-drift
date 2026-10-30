@@ -221,7 +221,7 @@ h2.sect{font-size:28px;margin:52px 0 6px}.dek.small{font-size:16px;margin-bottom
 .rk-tabs button[aria-selected="true"]{color:var(--ink);font-weight:600;border-bottom-color:var(--ink)}
 .rk-tabs button:hover{color:var(--ink)}
 .rk-tools{display:flex;gap:6px;padding-bottom:6px}
-.rk-tools button{font:inherit;font-size:13px;color:var(--ink);background:var(--bg);border:1px solid var(--rule);border-radius:4px;padding:4px 10px;cursor:pointer}
+.rk-tools button{white-space:nowrap;font:inherit;font-size:13px;color:var(--ink);background:var(--bg);border:1px solid var(--rule);border-radius:4px;padding:4px 10px;cursor:pointer}
 .rk-tools button:hover{border-color:var(--faint)}.rk-tools button[aria-pressed="true"]{background:var(--soft)}
 button:focus-visible{outline:2px solid var(--link);outline-offset:2px}
 .rk-sub{color:var(--muted);font-size:15px;margin:0 0 10px}
@@ -229,6 +229,13 @@ button:focus-visible{outline:2px solid var(--link);outline-offset:2px}
 .rk-bar .stack.over::after{content:"";position:absolute;right:-1px;top:-2px;bottom:-2px;width:6px;background:repeating-linear-gradient(135deg,var(--bg) 0 2px,transparent 2px 4px)}
 .rk-bar .seg.zero{width:2px;background:var(--faint)}
 .rk-table{margin:4px 0 0}
+.rk-weights{border:1px solid var(--rule);border-radius:6px;padding:12px 14px 8px;margin:0 0 14px;background:var(--soft)}
+.rk-wgrid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px 18px}
+.rk-wgrid label{display:grid;grid-template-columns:1fr auto;align-items:center;gap:2px 8px;font-size:13px;color:var(--muted)}
+.rk-wgrid input{grid-column:1/-1;width:100%;accent-color:var(--ink)}
+.rk-wgrid output{font-weight:700;color:var(--ink);font-variant-numeric:tabular-nums}
+.rk-weights p{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;margin:8px 0 0;font-size:13px;color:var(--faint)}
+.rk-weights p button{font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--rule);border-radius:4px;padding:2px 9px;cursor:pointer}
 .toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:7px 14px;border-radius:5px;font-size:14px;margin:0;z-index:9}
 /* tables */
 table{border-collapse:collapse;width:100%;font-size:15px}
@@ -257,6 +264,8 @@ footer.site{border-top:1px solid var(--rule);padding:18px 0 40px;color:var(--fai
 footer.site a{color:var(--faint)}
 #tip{position:fixed;pointer-events:none;background:var(--ink);color:var(--bg);padding:6px 9px;border-radius:4px;font-size:13px;max-width:280px;display:none;z-index:9}
 @media (max-width:760px){
+.rk-tools{flex-wrap:wrap}.rk-tools button{padding:4px 8px}
+.rk-wgrid{grid-template-columns:repeat(2,minmax(0,1fr))}
 .dc-grp{padding-left:0}
  h1{font-size:30px}
  .dc-axis{display:none}
@@ -276,7 +285,7 @@ footer.site a{color:var(--faint)}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 `;
 const TIP_JS = `const t=document.getElementById('tip');function show(el){t.textContent=el.dataset.tip;t.style.display='block';const r=el.getBoundingClientRect();t.style.left=Math.max(8,Math.min(innerWidth-290,r.left))+'px';t.style.top=(r.top-40)+'px'}
-document.querySelectorAll('[data-tip]').forEach(el=>{el.addEventListener('mouseenter',()=>show(el));el.addEventListener('focus',()=>show(el));el.addEventListener('mouseleave',()=>t.style.display='none');el.addEventListener('blur',()=>t.style.display='none')});`;
+const tipOf=e=>e.target.closest&&e.target.closest('[data-tip]');document.addEventListener('mouseover',e=>{const el=tipOf(e);if(el)show(el);else t.style.display='none'});document.addEventListener('focusin',e=>{const el=tipOf(e);if(el)show(el)});document.addEventListener('focusout',()=>t.style.display='none');`;
 
 const NAV: [string, string][] = [['/models/', 'Models'], ['/changes/', 'Changes'], ['/posts/', 'Findings'], ['/method/', 'Method'], ['/data/', 'Data']];
 function page(p: { path: string; title: string; description: string; body: string }) {
@@ -398,7 +407,8 @@ function panelHtml(p: Panel, active: boolean) {
   const w = (v: number) => (100 * Math.min(v, p.max) / p.max).toFixed(2) + '%';
   return `<div class="rk-panel" id="panel-${p.id}" role="tabpanel" aria-labelledby="tab-${p.id}"${active ? '' : ' hidden'}>
 <p class="rk-sub">${esc(p.sub)}</p>
-${p.id === 'overall' ? `<div class="key">${COMP.map(([k, l]) => `<span><i class="sw s-${k}"></i>${l} (${Math.round(stOf(ranked[0]).weights[k] * 100)}%)</span>`).join('')}<span><i class="k-whisk"></i>95% interval</span></div>` : ''}
+${p.id === 'overall' ? `<div class="rk-weights" id="rk-weights" hidden><div class="rk-wgrid">${COMP.map(([k, l]) => `<label><span><i class="sw-inline s-${k}"></i>${l}</span><input type="range" min="0" max="100" step="5" value="${Math.round(stOf(ranked[0]).weights[k] * 100)}" data-k="${k}" aria-label="${l} weight"><output>${Math.round(stOf(ranked[0]).weights[k] * 100)}%</output></label>`).join('')}</div><p><button type="button" data-preset="default">Default</button><button type="button" data-preset="equal">Equal</button><span>Weights are rescaled to add up to 100%. The link and image keep them.</span></p></div>
+<div class="key">${COMP.map(([k, l]) => `<span data-wk="${k}"><i class="sw s-${k}"></i>${l} (<span class="wpct">${Math.round(stOf(ranked[0]).weights[k] * 100)}</span>%)</span>`).join('')}<span id="rk-cikey"><i class="k-whisk"></i>95% interval</span></div>` : ''}
 <div class="rk" role="table" aria-label="${esc(p.title + '. ' + p.sub)}">
 <div class="rk-head" role="row"><span role="columnheader">Rank</span><span role="columnheader">Model</span><span role="columnheader" class="rk-axis">${p.ticks.map(t => `<i style="left:${w(t)}">${t}${p.unit}</i>`).join('')}</span><span role="columnheader">${p.id === 'overall' ? 'Index' : 'Rate'}</span></div>
 ${p.rows.map(r => {
@@ -409,10 +419,11 @@ ${p.rows.map(r => {
 }).join('')}</div></div>`;
 }
 const rankTable = `<div class="rk-table" id="rk-table" hidden><table><thead><tr><th>#</th><th class="l">Model</th><th>Index</th><th class="opt">95% CI</th>${COMP.map(([, l]) => `<th>${l}</th>`).join('')}</tr></thead><tbody>${ranked.map((m, i) => { const st = stOf(m);
-  return `<tr><td>${i + 1}</td><td class="l"><a href="/models/${slug(m)}/">${esc(nameOf(m))}</a></td><td><b>${st.index.toFixed(0)}</b></td><td class="opt">${st.ci[0].toFixed(0)}–${st.ci[1].toFixed(0)}</td>${COMP.map(([k]) => `<td>${pct(st.components[k])}</td>`).join('')}</tr>`; }).join('')}</tbody></table><p class="note">Component columns are raw shares of answers that changed. The index divides each by a fixed reference rate (Over time 0.75%, On repeat 1.75%, Option order 2.6%, Rewording 8.6%) and weights them 40/30/15/15.</p></div>`;
+  return `<tr><td>${i + 1}</td><td class="l"><a href="/models/${slug(m)}/">${esc(nameOf(m))}</a></td><td><b>${st.index.toFixed(0)}</b></td><td class="opt">${st.ci[0].toFixed(0)}–${st.ci[1].toFixed(0)}</td>${COMP.map(([k]) => `<td>${pct(st.components[k])}</td>`).join('')}</tr>`; }).join('')}</tbody></table><p class="note">Component columns are raw shares of answers that changed. The index divides each by a fixed reference rate (${COMP.map(([k, l]) => `${l} ${pct(stOf(ranked[0]).scales[k], 2)}`).join(', ')}) and weights them ${COMP.map(([k]) => Math.round(stOf(ranked[0]).weights[k] * 100)).join('/')} by default.</p></div>`;
 // data the PNG export draws from (only what is on screen)
 const exportData = { date: latest.date, provisional, panels: panels.map(p => ({ id: p.id, title: p.title, sub: p.sub, unit: p.unit, max: p.max, ticks: p.ticks,
-  rows: p.rows.map(r => ({ rank: r.rank, name: nameOf(r.m), vendor: vendorName(r.m), segs: r.segs, value: r.value, label: r.label, ci: r.ci ?? null, sep: r.sep, flag: r.flag })) })) };
+  rows: p.rows.map(r => ({ rank: r.rank, name: nameOf(r.m), vendor: vendorName(r.m), segs: r.segs, value: r.value, label: r.label, ci: r.ci ?? null, sep: r.sep, flag: r.flag })) })),
+  weights: { comps: COMP, scales: stOf(ranked[0]).scales, defaults: stOf(ranked[0]).weights, models: ranked.map(m => ({ name: nameOf(m), vendor: vendorName(m), href: `/models/${slug(m)}/`, flag: flagged.has(m), c: stOf(m).components })) } };
 
 const RANK_JS = `(()=>{const tabs=[...document.querySelectorAll('.rk-tabs [role=tab]')];const panels=[...document.querySelectorAll('.rk-panel')];const table=document.getElementById('rk-table');const tbtn=document.getElementById('rk-tablebtn');
 function select(id,push){tabs.forEach(t=>{const on=t.dataset.id===id;t.setAttribute('aria-selected',on);t.tabIndex=on?0:-1});panels.forEach(p=>p.hidden=p.id!=='panel-'+id||!table.hidden);if(push)history.replaceState(null,'',id==='overall'?location.pathname:'#'+id)}
@@ -421,7 +432,7 @@ const h=location.hash.slice(1);if(tabs.some(t=>t.dataset.id===h))select(h,false)
 tbtn.addEventListener('click',()=>{table.hidden=!table.hidden;tbtn.setAttribute('aria-pressed',!table.hidden);tbtn.textContent=table.hidden?'Table':'Chart';const cur=tabs.find(t=>t.getAttribute('aria-selected')==='true').dataset.id;panels.forEach(p=>p.hidden=!table.hidden||p.id!=='panel-'+cur)});
 const toast=m=>{const n=document.getElementById('rk-toast');n.textContent=m;n.hidden=false;setTimeout(()=>n.hidden=true,2200)};
 document.getElementById('rk-link').addEventListener('click',async()=>{try{await navigator.clipboard.writeText(location.href);toast('Link copied')}catch(e){toast('Copy failed; use the address bar')}});
-document.getElementById('rk-png').addEventListener('click',()=>{const D=JSON.parse(document.getElementById('rk-data').textContent);const cur=tabs.find(t=>t.getAttribute('aria-selected')==='true').dataset.id;const P=D.panels.find(p=>p.id===cur);
+document.getElementById('rk-png').addEventListener('click',()=>{const D=JSON.parse(document.getElementById('rk-data').textContent);const cur=tabs.find(t=>t.getAttribute('aria-selected')==='true').dataset.id;const P=(cur==='overall'&&window.rkCustom)||D.panels.find(p=>p.id===cur);
 const cs=getComputedStyle(document.documentElement);const v=n=>cs.getPropertyValue(n).trim();const s=2,W=1200,rowH=34,top=150,left=330,right=110,H=top+P.rows.length*rowH+P.rows.filter(r=>r.sep).length*10+70;
 const c=document.createElement('canvas');c.width=W*s;c.height=H*s;const g=c.getContext('2d');g.scale(s,s);g.fillStyle=v('--bg');g.fillRect(0,0,W,H);
 g.fillStyle=v('--ink');g.font='600 30px Newsreader, Georgia, serif';g.fillText(P.title,40,58);g.fillStyle=v('--muted');g.font='400 16px "Public Sans", sans-serif';g.fillText(P.sub+(D.provisional?' Provisional.':''),40,88);
@@ -442,13 +453,14 @@ const rankSection = `<section class="rk-wrap" aria-labelledby="rk-title">
 ${provisional ? `<p class="prov">Provisional: ${maxRuns} daily runs so far. Final after ${MIN_RUNS}, on ${shortDate(finalOn)}.</p>` : ''}
 ${flagged.size ? `<p class="callout"><b>Recent change detected:</b> ${[...flagged].map(m => `<a href="/models/${slug(m)}/">${esc(nameOf(m))}</a> ${pct(drift(m, latest)!.flip_rate)}${notes(m).includes('Same snapshot ID.') ? ' (same snapshot ID)' : ''}`).join(', ')}. <a href="/changes/">All changes</a>.</p>` : ''}
 <div class="rk-bar-top"><div class="rk-tabs" role="tablist" aria-label="Ranking view">${panels.map((p, i) => `<button type="button" role="tab" id="tab-${p.id}" data-id="${p.id}" aria-controls="panel-${p.id}" aria-selected="${i === 0}" tabindex="${i === 0 ? 0 : -1}">${esc(p.tab)}</button>`).join('')}</div>
-<div class="rk-tools"><button type="button" id="rk-link">Copy link</button><button type="button" id="rk-png">Download image</button><button type="button" id="rk-tablebtn" aria-pressed="false">Table</button></div></div>
+<div class="rk-tools"><button type="button" id="rk-wbtn" aria-expanded="false" aria-controls="rk-weights">Weights</button><button type="button" id="rk-link">Copy link</button><button type="button" id="rk-png">Download image</button><button type="button" id="rk-tablebtn" aria-pressed="false">Table</button></div></div>
 ${panels.map((p, i) => panelHtml(p, i === 0)).join('')}
 ${rankTable}
 <p class="foot">Lines separate groups whose intervals don't overlap. Over time counts only change beyond the model's own noise. <a href="/method/#stability">How the index works</a>. ${lastRunLine()}</p>
 <p id="rk-toast" class="toast" role="status" hidden></p>
 <script type="application/json" id="rk-data">${JSON.stringify(exportData).replace(/</g, '\\u003c')}</script>
 <script>${RANK_JS}</script>
+<script>${fs.readFileSync(path.join(ROOT, 'src/site-weights.js'), 'utf8')}</script>
 </section>`;
 
 const chart = `<div class="dc" role="group" aria-label="Recent change in answers, per model, with each model's noise">
