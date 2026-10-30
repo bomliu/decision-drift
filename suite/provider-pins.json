@@ -1,0 +1,5 @@
+{
+  "_doc": "Models whose maker also serves them on OpenRouter are pinned to the maker, without fallback. Comparisons restart on `since`.",
+  "cloudflare/clef": { "provider": "cloudflare", "name": "Cloudflare", "since": "2026-10-30" },
+  "cloudflare/clef-flash": { "provider": "cloudflare", "name": "Cloudflare", "since": "2026-10-30" }
+}

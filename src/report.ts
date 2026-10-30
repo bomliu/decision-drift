@@ -24,11 +24,14 @@ const WINDOW = 30, HALF_LIFE = 7, POOL = 7;
 const dayNum = (d: string) => Math.round(new Date(d + 'T00:00:00Z').getTime() / 864e5);
 const allDates = fs.readdirSync(path.join(ROOT, 'results')).filter(d => /^\d{4}-\d{2}-\d{2}$/.test(d) && d < date).sort();
 const mainRunOf = (d: string) => { const rs = fs.readdirSync(path.join(ROOT, 'results', d)); return rs.includes('daily') ? 'daily' : rs.includes('day1') ? 'day1' : null; };
+// Pinned models start a new series on the pin date: earlier runs came from other hosts.
+const pins: Record<string, { provider: string; name: string; since: string }> = JSON.parse(fs.readFileSync(path.join(ROOT, 'suite/provider-pins.json'), 'utf8'));
+const inSeries = (m: string, d: string) => !(pins[m]?.since && pins[m].since <= date && d < pins[m].since);
 const windowDates = allDates.filter(d => dayNum(date) - dayNum(d) <= WINDOW && mainRunOf(d));
 const dupDates = new Set(windowDates.filter(d => fs.existsSync(path.join(ROOT, 'results', d, mainRunOf(d) + '-dup'))));
 const poolDates = new Set([...dupDates].slice(-(POOL - 1)));
-type Lite = Map<string, { top: string; req?: string }>;
-const lite = (recs: Rec[] | undefined): Lite => new Map([...index(recs, 'base')].map(([k, n]) => [k, { top: n.top, req: n.req }]));
+type Lite = Map<string, { top: string; req?: string; type?: string }>;
+const lite = (recs: Rec[] | undefined): Lite => new Map([...index(recs, 'base')].map(([k, n]) => [k, { top: n.top, req: n.req, type: n.type }]));
 const past = windowDates.map(d => { const r = mainRunOf(d)!; const m0 = loadRun(d, r); const d0 = dupDates.has(d) ? loadRun(d, r + '-dup') : new Map<string, Rec[]>();
   return { date: d, main: new Map([...m0.keys()].map(m => [m, lite(m0.get(m))])), dup: new Map([...d0.keys()].map(m => [m, lite(d0.get(m))])) }; });
 const olderThanWindow = allDates.length > 0 && allDates[0] < (windowDates[0] ?? date);
@@ -78,7 +81,18 @@ function stability(time: number[] | null, timeNoise: number, repeat: number[], r
 const qType = (k: string) => { const [id, q] = k.split('|'); return itemById.get(id)!.questions[q]?.type; };
 const fam = (k: string) => itemById.get(k.split('|')[0])!.family;
 
-const pooledNoise = (m: string, base: Answers) => [...past.flatMap(r => poolDates.has(r.date) && r.dup.has(m) && r.main.has(m) ? flips(r.main.get(m)!, r.dup.get(m)!) : []), ...flips(base, index(dup.get(m), 'base'))];
+const pooledNoise = (m: string, base: Answers) => [...past.flatMap(r => poolDates.has(r.date) && inSeries(m, r.date) && r.dup.has(m) && r.main.has(m) ? flips(r.main.get(m)!, r.dup.get(m)!) : []), ...flips(base, index(dup.get(m), 'base'))];
+// Direction of changed answers (earlier a, later b): on questions with a reference label, whether the answer
+// became right, became wrong, or moved between wrong answers; the rest are ungraded.
+function direction(a: Answers | Lite, b: Answers | Lite) {
+  const out = { fixed: 0, broke: 0, swapped: 0, ungraded: 0 };
+  for (const [k, x] of a) { const y = b.get(k); if (!y || x.top === y.top || (x.req && y.req && x.req !== y.req)) continue;
+    const [id, q] = k.split('|'); const g = itemById.get(id)?.gold?.[q];
+    if (g === undefined) { out.ungraded++; continue; }
+    const was = goldMatches(x as Norm, g), now = goldMatches(y as Norm, g);
+    if (!was && now) out.fixed++; else if (was && !now) out.broke++; else out.swapped++; }
+  return out;
+}
 const rateOf = (xs: number[]) => { const k = xs.reduce((a, v) => a + v, 0); const [lo, hi] = wilson(k, xs.length); return { n: xs.length, flips: k, flip_rate: xs.length ? k / xs.length : NaN, ci: [lo, hi] }; };
 // Recent change: today vs each of the last WINDOW days, weighted by exponential decay (half-life HALF_LIFE days)
 // shifted to reach zero at WINDOW. A day with no run uses the closest run; days before the model was first seen
@@ -87,8 +101,8 @@ const rateOf = (xs: number[]) => { const k = xs.reduce((a, v) => a + v, 0); cons
 // day has no repeat run), weighted the same way. Noise varies by day, so a noisy day is not read as change.
 const dayNoise = (m: string, r: typeof past[number]) => r.dup.has(m) && r.main.has(m) ? rateOf(flips(r.main.get(m)!, r.dup.get(m)!)).flip_rate : NaN;
 function recentChange(m: string, base: Answers, todayNoise: number, pooled: number) {
-  const runs = past.filter(p => p.main.has(m)); if (!runs.length) return null;
-  const firstSeen = olderThanWindow && runs[0].date === past[0]?.date ? -Infinity : dayNum(runs[0].date);
+  const runs = past.filter(p => p.main.has(m) && inSeries(m, p.date)); if (!runs.length) return null;
+  const firstSeen = olderThanWindow && runs[0].date === past[0]?.date && inSeries(m, past[0].date) ? -Infinity : dayNum(runs[0].date);
   const num = new Map<string, number>(), den = new Map<string, number>(), share = new Map<string, number>();
   for (let k = 1; k <= WINDOW; k++) {
     const target = dayNum(date) - k; if (target < firstSeen) continue;
@@ -134,7 +148,7 @@ for (const m of models) {
   const served = [...new Set(recs.map(r => r.model_served).filter(Boolean))];
   const providers = [...new Set(recs.map(r => r.provider).filter(Boolean))];
   perModel[m] = {
-    served, providers,
+    served, providers, provider_pin: pins[m]?.since && pins[m].since <= date ? pins[m] : null,
     requests: recs.length, errors: recs.length - ok.length, error_rate: (recs.length - ok.length) / Math.max(1, recs.length),
     error_samples: [...new Set(recs.filter(r => !r.ok).map(r => `${r.status} ${String(r.error).slice(0, 120)}`))].slice(0, 3),
     latency_p50: quantile(lat, 0.5), latency_p95: quantile(lat, 0.95),
@@ -144,13 +158,13 @@ for (const m of models) {
     accuracy_by_type: Object.fromEntries(Object.entries(byType).map(([t, [c, n]]) => [t, { acc: c / n, n }])),
     ece, brier_noul: mean(brier), overconfidence: graded ? mean(conf) - correct / graded : NaN,
     noise: compare(base, index(dup.get(m), 'base')),
-    noise_pooled: dup.get(m) ? { ...rateOf(pooledNoise(m, base)), runs: [...past.filter(r => r.dup.has(m)).map(r => r.date), date] } : null,
+    noise_pooled: dup.get(m) ? { ...rateOf(pooledNoise(m, base)), runs: [...past.filter(r => poolDates.has(r.date) && inSeries(m, r.date) && r.dup.has(m)).map(r => r.date), date] } : null,
     noise_same_provider: compare(base, index(dup.get(m), 'base'), (k, x) => x.provider === index(dup.get(m), 'base').get(k)?.provider),
     noise_cross_provider: compare(base, index(dup.get(m), 'base'), (k, x) => { const y = index(dup.get(m), 'base').get(k); return !!y && x.provider !== y.provider; }),
     shuffle: compare(base, index(recs, 'shuffle'), undefined, true),
     paraphrase: compare(base, index(recs, 'para'), undefined, true),
-    drift_vs_compare: cmp.size ? compare(index(cmp.get(m), 'base'), base) : null,
-    drift_vs_previous: (() => { const p = past.filter(r => r.main.has(m)).at(-1); return p ? { date: p.date, ...rateOf(flips(p.main.get(m)!, base)) } : null; })(),
+    drift_vs_compare: cmp.size ? { ...compare(index(cmp.get(m), 'base'), base), direction: direction(index(cmp.get(m), 'base'), base) } : null,
+    drift_vs_previous: (() => { const p = past.filter(r => r.main.has(m) && inSeries(m, r.date)).at(-1); return p ? { date: p.date, ...rateOf(flips(p.main.get(m)!, base)), direction: direction(p.main.get(m)!, base) } : null; })(),
     drift_recent: rc?.summary ?? null,
     stability: (() => { const dupBase = index(dup.get(m), 'base'); if (!dupBase.size) return null;
       return stability(rc?.per ?? null, rc?.expected ?? 0, pooledNoise(m, base), flips(base, index(recs, 'shuffle'), true), flips(base, index(recs, 'para'), true)); })(),

@@ -48,6 +48,9 @@ const items = loadItems(...itemFiles);
 const jobs = buildJobs(items);
 const catalog = await fetchCatalog();
 const excluded: Record<string, string> = JSON.parse(fs.readFileSync(path.join(ROOT, 'suite/models-excluded.json'), 'utf8'));
+// Provider pins: from `since`, requests for these models go only to the maker (no fallback).
+const pins: Record<string, { provider: string; since: string }> = JSON.parse(fs.readFileSync(path.join(ROOT, 'suite/provider-pins.json'), 'utf8'));
+const pinOf = (m: string) => (pins[m]?.provider && pins[m].since <= date ? pins[m].provider : null);
 const models = args.models && args.models !== 'all' ? args.models.split(',') : catalog.map(m => m.id).filter(id => !(id in excluded));
 
 const start = await keyUsage();
@@ -69,10 +72,11 @@ await pool(models, parallelModels, async (model) => {
   let consecutiveFail = 0;
   await pool(jobs, perModel, async (job) => {
     if (stopped || consecutiveFail >= 8) return;
-    const res = await decide(model, job.item.state, job.questions);
+    const pin = pinOf(model);
+    const res = await decide(model, job.item.state, job.questions, pin ? { provider: { only: [pin], allow_fallbacks: false } } : {});
     const rec = {
       item_id: job.item.id, variant: job.variant, model_requested: model,
-      model_served: res.response?.model ?? null, provider: res.response?.provider ?? null,
+      model_served: res.response?.model ?? null, provider: res.response?.provider ?? null, provider_pin: pin,
       ok: res.ok, status: res.status, latency_ms: res.latency_ms, attempts: res.attempts,
       answers: res.response?.answers ?? null, usage: res.response?.usage ?? null,
       error: res.error ?? null, ts: new Date().toISOString(),

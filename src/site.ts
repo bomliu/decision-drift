@@ -24,6 +24,7 @@ for (const r of reports) for (const p of Object.values(r.perModel)) if (p.noise_
 const latest = reports.at(-1)!;
 const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, 'suite/manifest-v1.json'), 'utf8'));
 const status = fs.existsSync(path.join(ROOT, 'status.json')) ? JSON.parse(fs.readFileSync(path.join(ROOT, 'status.json'), 'utf8')) : null;
+const pinsSite: Record<string, { name: string; since: string }> = Object.fromEntries(Object.entries(JSON.parse(fs.readFileSync(path.join(ROOT, 'suite/provider-pins.json'), 'utf8'))).filter(([k]) => !k.startsWith('_'))) as any;
 const excluded: Record<string, string> = JSON.parse(fs.readFileSync(path.join(ROOT, 'suite/models-excluded.json'), 'utf8'));
 const models = [...new Set(reports.flatMap(r => Object.keys(r.perModel)))].sort((a, b) => a.replace('~', '').localeCompare(b.replace('~', '')));
 const slug = (m: string) => m.replace(/^~/, 'alias-').replace(/\//g, '--').replace(/[^a-zA-Z0-9.-]/g, '-');
@@ -90,6 +91,13 @@ const posts = postDirs.filter(d => fs.existsSync(d)).flatMap(d => fs.readdirSync
   .filter(p => !p.draft || args.drafts === 'true').sort((a, b) => b.date.localeCompare(a.date));
 
 // ---------- display helpers ----------
+// The provider name under which each maker serves its own models on OpenRouter
+const FIRST_PARTY: Record<string, string> = { typesafe: 'TypeSafe', perplexity: 'Perplexity', microsoft: 'Azure', cloudflare: 'Cloudflare', liquid: 'Liquid', inception: 'Inception', upstage: 'Upstage', respan: 'Respan', togethercomputer: 'Together', scaledown: 'ScaleDown', openai: 'OpenAI', baseten: 'BaseTen' };
+const servedLine = (m: string, p: any) => {
+  const by = `Served by ${esc(p.providers.join(', '))}`;
+  if (p.provider_pin) return `${by}, pinned to the maker since ${shortDate(p.provider_pin.since)}. Earlier runs were mostly answered by other hosts, so comparisons start there.`;
+  return p.providers.includes(FIRST_PARTY[vendorOf(m)]) ? `${by}.` : `${by}, ${p.providers.length > 1 ? 'third-party hosts' : 'a third-party host'}; the maker doesn't serve it on OpenRouter.`;
+};
 const VENDOR: Record<string, string> = { typesafe: 'TypeSafe', perplexity: 'Perplexity', microsoft: 'Microsoft', cloudflare: 'Cloudflare', liquid: 'Liquid', 'nace-ai': 'Nace.AI', inception: 'Inception', upstage: 'Upstage', respan: 'Respan', togethercomputer: 'Together', jaredpalmer: 'Jared Palmer', scaledown: 'ScaleDown', openai: 'OpenAI' };
 const vendorOf = (m: string) => m.replace(/^~/, '').split('/')[0];
 const vendorName = (m: string) => VENDOR[vendorOf(m)] ?? vendorOf(m);
@@ -322,6 +330,7 @@ for (const m of models) {
   h.forEach(({ date, p }, i) => {
     if (i === 0 && date !== BASELINE.date && !isAlias(m)) changeLog.push({ date, m, kind: 'new', text: 'Now tracked.' });
     if (i === 0) return;
+    if (p.provider_pin && !h[i - 1].p.provider_pin) { changeLog.push({ date, m, kind: 'serve', text: `Requests now pinned to ${p.provider_pin.name}, the maker. Earlier runs were mostly answered by other hosts, so comparisons restart here.` }); return; }
     const prev = h[i - 1].p.served.join(', '), cur = p.served.join(', ');
     if (cur && prev && cur !== prev) changeLog.push({ date, m, kind: 'serve', text: `Now serves ${cur} (was ${prev}).` });
     const d = prevDrift(p); const next = h[i + 1]?.p;
@@ -329,7 +338,7 @@ for (const m of models) {
     const before = next.drift_recent?.by_run?.find((b: any) => b.date === d.date);
     if (!(before ? hotVs(before, next) : hotVs(drift(m, reportOn.get(h[i + 1].date)!), next))) return;
     const span = Math.round((new Date(date).getTime() - new Date(d.date).getTime()) / 864e5) > 1 ? `between ${shortDate(d.date)} and ${shortDate(date)}` : `on ${shortDate(date)}`;
-    changeLog.push({ date, m, kind: 'change', text: `Changed ${span}: ${pct(d.flip_rate)} of answers differ from the previous run, against ${pct(p.noise.flip_rate)} noise.${cur === prev ? ' Same snapshot ID.' : ''}` });
+    changeLog.push({ date, m, kind: 'change', text: `Changed ${span}: ${pct(d.flip_rate)} of answers differ from the previous run, against ${pct(p.noise.flip_rate)} noise.${cur === prev ? ' Same snapshot ID.' : ''}${d.direction ? ` Graded answers: ${d.direction.fixed} became right, ${d.direction.broke} became wrong.` : ''}` });
   });
 }
 changeLog.sort((a, b) => b.date.localeCompare(a.date) || a.kind.localeCompare(b.kind) || a.m.localeCompare(b.m));
@@ -506,20 +515,21 @@ for (const m of models) {
   const snaps = [...new Set(h.flatMap(x => x.p.served))];
   const rows = h.slice().reverse().map(({ date, p }) => {
     const dr = prevDrift(p); const rh = hotVs(dr, p);
-    return `<tr><td>${shortDate(date)}</td>${snaps.length > 1 ? `<td class="l opt">${esc(p.served.join(', '))}</td>` : ''}<td class="${rh ? 'hot' : ''}">${dr?.n ? pct(dr.flip_rate) : 'first run'}</td><td class="opt">${dr?.n ? ci(dr.ci) : ''}</td><td>${pct(p.noise.flip_rate)}</td><td class="opt">${pct(p.shuffle.flip_rate)}</td><td class="opt">${pct(p.paraphrase.flip_rate)}</td><td>${pct(p.accuracy)}</td><td class="opt">${ms(p.latency_p50)}</td></tr>`;
+    return `<tr><td>${shortDate(date)}</td>${snaps.length > 1 ? `<td class="l opt">${esc(p.served.join(', '))}</td>` : ''}<td class="${rh ? 'hot' : ''}">${dr?.n ? pct(dr.flip_rate) : 'first run'}</td><td class="opt">${dr?.n ? ci(dr.ci) : ''}</td><td class="opt">${dr?.direction && dr.flips ? `${dr.direction.fixed} / ${dr.direction.broke}` : ''}</td><td>${pct(p.noise.flip_rate)}</td><td class="opt">${pct(p.shuffle.flip_rate)}</td><td class="opt">${pct(p.paraphrase.flip_rate)}</td><td>${pct(p.accuracy)}</td><td class="opt">${ms(p.latency_p50)}</td></tr>`;
   }).join('');
   const types = last.drift_by_type ? Object.entries<any>(last.drift_by_type).filter(([, v]) => v.n) : [];
   write(`models/${slug(m)}/index.html`, page({ path: `/models/${slug(m)}/`, title: m, description: `Daily drift, noise and robustness for ${m}.`, body: `
 <p class="crumb"><a href="/models/">Models</a> / ${esc(isAlias(m) ? 'Aliases' : vendorName(m))}</p>
 <h1>${esc(isAlias(m) ? m : nameOf(m))}</h1>
-<p class="meta">${isAlias(m) ? `Alias. Serves ${esc(last.served.join(', '))}.` : `Snapshot ${esc(last.served.join(', '))}. Served by ${esc(last.providers.join(', '))}.`}</p>
+<p class="meta">${isAlias(m) ? `Alias. Serves ${esc(last.served.join(', '))}.` : `Snapshot ${esc(last.served.join(', '))}. ${servedLine(m, last)}`}</p>
 <div class="stats"><div><b>${rankOf.has(m) ? `#${rankOf.get(m)} of ${ranked.length}` : '—'}</b><span>${rankOf.has(m) ? `stability, index ${last.stability.index.toFixed(0)}${provisional || runsOf(m) < MIN_RUNS ? ', provisional' : ''}` : 'not ranked yet'}</span></div><div><b class="${hot ? 'hot' : ''}">${d?.n ? pct(d.flip_rate) : '—'}</b><span>recent change</span></div><div><b>${pct(last.noise.flip_rate)}</b><span>noise</span></div><div><b>${pct(last.accuracy)}</b><span>gold accuracy</span></div></div>
 <h2>Daily runs</h2>
 <div class="days" role="img" aria-label="One square per day, each compared with the previous run">${squares}</div>
 <div class="days-axis"><span>${shortDate(dayList[0])}</span><span>${shortDate(dayList.at(-1)!)}</span></div>
 <div class="legend"><span><i class="d-base"></i>First run</span><span><i class="d-ok"></i>No change detected</span><span><i class="d-hot"></i>Change detected</span><span><i class="d-miss"></i>No run</span></div>
 <h2>Run history</h2>
-<table><thead><tr><th>Run</th>${snaps.length > 1 ? '<th class="l opt">Snapshot</th>' : ''}<th>Changed<span class="long"> vs previous</span></th><th class="opt">95% CI</th><th>Noise</th><th class="opt">Shuffle</th><th class="opt">Paraphrase</th><th>Gold acc.</th><th class="opt">p50</th></tr></thead><tbody>${rows}</tbody></table>
+<table><thead><tr><th>Run</th>${snaps.length > 1 ? '<th class="l opt">Snapshot</th>' : ''}<th>Changed<span class="long"> vs previous</span></th><th class="opt">95% CI</th><th class="opt">Became right / wrong</th><th>Noise</th><th class="opt">Shuffle</th><th class="opt">Paraphrase</th><th>Gold acc.</th><th class="opt">p50</th></tr></thead><tbody>${rows}</tbody></table>
+<p class="note">Became right / wrong counts changed answers on questions with a reference label. Changes on questions without one, usually the ambiguous ones, aren't in either count.</p>
 ${rankOf.has(m) ? `<h2>Instability index</h2><table class="narrow"><thead><tr><th>Source</th><th>Answers changed</th><th class="opt">Reference</th><th>Weight</th><th>Points</th></tr></thead><tbody>${COMP.map(([k, label]) => `<tr><td><i class="sw-inline s-${k}"></i>${label}</td><td>${pct(last.stability.components[k])}</td><td class="opt">${pct(last.stability.scales[k], 2)}</td><td>${Math.round(last.stability.weights[k] * 100)}%</td><td>${last.stability.parts[k].toFixed(1)}</td></tr>`).join('')}<tr><td><b>Index</b></td><td></td><td class="opt"></td><td></td><td><b>${last.stability.index.toFixed(1)}</b><small>${last.stability.ci[0].toFixed(0)}–${last.stability.ci[1].toFixed(0)}</small></td></tr></tbody></table><p class="note">Over time counts only change beyond this model's noise.</p>` : ''}
 ${types.length ? `<h2>Changed since Oct 20, by question type</h2><table class="narrow"><thead><tr><th>Type</th><th>Questions</th><th>Changed</th><th class="opt">95% CI</th></tr></thead><tbody>${types.map(([t, v]) => `<tr><td>${TYPE_NAME[t]}</td><td>${v.n}</td><td>${pct(v.flip_rate)}</td><td class="opt">${ci(v.ci)}</td></tr>`).join('')}</tbody></table>` : ''}
 ${last.providers.length > 1 && last.noise_cross_provider?.n ? `<h2>Providers</h2><p>Served by ${esc(last.providers.join(', '))}. Repeat requests that went to a different provider changed ${pct(last.noise_cross_provider.flip_rate)} of answers (${last.noise_cross_provider.n} questions); same provider: ${pct(last.noise_same_provider.flip_rate)} (${last.noise_same_provider.n}).</p>` : ''}
@@ -557,7 +567,7 @@ write('method/index.html', page({ path: '/method/', title: 'Method', description
 <h2>Measures</h2>
 <ul>
 <li><strong>Recent change:</strong> today's top answers compared with each of the last 30 days, on byte-identical requests. Each day's comparison is weighted by exponential decay (half-life 7 days), shifted to reach zero at 30 days, so a change counts most the day after it happens and stops counting after 30 stable days. A day without a run uses the closest run; days before a model was first tracked are left out.</li>
-<li><strong>Daily squares and run history:</strong> each run against the previous run.</li>
+<li><strong>Daily squares and run history:</strong> each run against the previous run. Changed answers on questions with a reference label are split into those that became right and those that became wrong. The index ignores direction: a fix still moves the probabilities someone set a threshold on.</li>
 <li><strong>Change log:</strong> a change is listed on the run where it first differs from the previous run beyond noise, once the next run confirms it. New snapshot IDs and newly tracked models are listed the day they appear.</li>
 <li><strong>Noise:</strong> share that differs when 100 inputs are sent again minutes later, pooled over the last 7 days. A change is detected only when its 95% interval sits above the noise interval. A noisier model needs a bigger change to be detected; that cost shows up in its index through the repeat component.</li>
 <li><strong>Option shuffle, paraphrase:</strong> share that changes when choice options are reordered, or instructions reworded with the same meaning.</li>
@@ -566,6 +576,8 @@ write('method/index.html', page({ path: '/method/', title: 'Method', description
 </ul>
 <h2 id="stability">Instability index</h2>
 <p>Lower is better; 100 is an average model. Four change rates feed it: recent change beyond the model's noise (40%), change on repeat (30%), change when options are reordered (15%), and change when instructions are reworded (15%). The rates sit on very different scales (rewording typically moves 8.6% of answers, recent change beyond noise under 1%), so each is first divided by a fixed reference rate: the average across models on Oct 28, 2026 (0.36%, 1.75%, 2.6%, 8.6%). Without that step, rewording would decide most of the ranking whatever the weights. The references stay fixed, so a model's index moves only when its own behavior does. Over time and on repeat weigh most because users can't fix them on their side. The 95% interval comes from resampling questions 1,000 times. Lines on the ranking separate groups whose intervals don't overlap the group leader's. Rankings are provisional until a model has ${MIN_RUNS} daily runs. Aliases and models with a single run aren't ranked.</p>
+<h2>Providers</h2>
+<p>OpenRouter can route one model to several hosts, and hosts can answer differently. When a model's maker serves it alongside other hosts, requests are pinned to the maker with no fallback, so a change is the maker's and an outage counts as errors. Pinned: ${Object.entries(pinsSite).map(([m, v]) => `${esc(nameOf(m))} to ${esc(v.name)} (from ${shortDate(v.since)})`).join(', ')}. Models the maker doesn't serve on OpenRouter are labeled third-party hosted.</p>
 <h2>Schedule and limits</h2>
 <p>Daily at 10:17 UTC through OpenRouter's decisions API, which is in alpha. Every response is stored raw. Rates carry 95% Wilson intervals; recent change uses a normal approximation over questions, and the index a bootstrap. Models that can't answer Choice and Score questions are listed as not tracked.</p>
 </article>` }));

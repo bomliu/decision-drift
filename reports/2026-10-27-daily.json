@@ -15,6 +15,7 @@
     "PrimeIntellect",
     "Cloudflare"
    ],
+   "provider_pin": null,
    "requests": 741,
    "errors": 0,
    "error_rate": 0,
@@ -118,7 +119,13 @@
      0.00011992855496564552,
      0.0038382197991666672
     ],
-    "mean_tv": 0.0016003828618880468
+    "mean_tv": 0.0016003828618880468,
+    "direction": {
+     "fixed": 0,
+     "broke": 0,
+     "swapped": 0,
+     "ungraded": 1
+    }
    },
    "drift_vs_previous": {
     "date": "2026-10-20",
@@ -128,7 +135,13 @@
     "ci": [
      0.00011992855496564552,
      0.0038382197991666672
-    ]
+    ],
+    "direction": {
+     "fixed": 0,
+     "broke": 0,
+     "swapped": 0,
+     "ungraded": 1
+    }
    },
    "drift_recent": {
     "n": 1472,
@@ -235,6 +248,7 @@
     "Makora",
     "PrimeIntellect"
    ],
+   "provider_pin": null,
    "requests": 741,
    "errors": 0,
    "error_rate": 0,
@@ -338,7 +352,13 @@
      0.0067015472104669255,
      0.017583985871132073
     ],
-    "mean_tv": 0.012220235848845008
+    "mean_tv": 0.012220235848845008,
+    "direction": {
+     "fixed": 2,
+     "broke": 5,
+     "swapped": 1,
+     "ungraded": 8
+    }
    },
    "drift_vs_previous": {
     "date": "2026-10-20",
@@ -348,7 +368,13 @@
     "ci": [
      0.0067015472104669255,
      0.017583985871132073
-    ]
+    ],
+    "direction": {
+     "fixed": 2,
+     "broke": 5,
+     "swapped": 1,
+     "ungraded": 8
+    }
    },
    "drift_recent": {
     "n": 1472,
@@ -452,6 +478,7 @@
    "providers": [
     "Cloudflare"
    ],
+   "provider_pin": null,
    "requests": 741,
    "errors": 0,
    "error_rate": 0,
@@ -555,7 +582,13 @@
      0,
      0.002611838011652648
     ],
-    "mean_tv": 0
+    "mean_tv": 0,
+    "direction": {
+     "fixed": 0,
+     "broke": 0,
+     "swapped": 0,
+     "ungraded": 0
+    }
    },
    "drift_vs_previous": {
     "date": "2026-10-20",
@@ -565,7 +598,13 @@
     "ci": [
      0,
      0.002611838011652648
-    ]
+    ],
+    "direction": {
+     "fixed": 0,
+     "broke": 0,
+     "swapped": 0,
+     "ungraded": 0
+    }
    },
    "drift_recent": {
     "n": 1467,
@@ -669,6 +708,7 @@
    "providers": [
     "Inception"
    ],
+   "provider_pin": null,
    "requests": 741,
    "errors": 0,
    "error_rate": 0,
@@ -772,7 +812,13 @@
      0.00774876423872182,
      0.019247086806539405
     ],
-    "mean_tv": 0.01075325593348313
+    "mean_tv": 0.01075325593348313,
+    "direction": {
+     "fixed": 3,
+     "broke": 3,
+     "swapped": 2,
+     "ungraded": 10
+    }
    },
    "drift_vs_previous": {
     "date": "2026-10-20",
@@ -782,7 +828,13 @@
     "ci": [
      0.00774876423872182,
      0.019247086806539405
-    ]
+    ],
+    "direction": {
+     "fixed": 3,
+     "broke": 3,
+     "swapped": 2,
+     "ungraded": 10
+    }
    },
    "drift_recent": {
     "n": 1472,
@@ -887,6 +939,7 @@
     "SiliconFlow",
     "Phala"
    ],
+   "provider_pin": null,
    "requests": 741,
    "errors": 0,
    "error_rate": 0,
@@ -990,7 +1043,13 @@
      0.002305393099733989,
      0.009783709145384999
     ],
-    "mean_tv": 0.0024355916297250355
+    "mean_tv": 0.0024355916297250355,
+    "direction": {
+     "fixed": 1,
+     "broke": 0,
+     "swapped": 1,
+     "ungraded": 5
+    }
    },
    "drift_vs_previous": {
     "date": "2026-10-20",
@@ -1000,7 +1059,13 @@
     "ci": [
      0.002305393099733989,
      0.009783709145384999
-    ]
+    ],
+    "direction": {
+     "fixed": 1,
+     "broke": 0,
+     "swapped": 1,
+     "ungraded": 5
+    }
    },
    "drift_recent": {
     "n": 1472,
@@ -1104,6 +1169,7 @@
    "providers": [
     "Liquid"
    ],
+   "provider_pin": null,
    "requests": 741,
    "errors": 0,
    "error_rate": 0,
@@ -1207,7 +1273,13 @@
      0.03539719831323572,
      0.0566462838599189
     ],
-    "mean_tv": 0.036357008348974255
+    "mean_tv": 0.036357008348974255,
+    "direction": {
+     "fixed": 21,
+     "broke": 18,
+     "swapped": 0,
+     "ungraded": 27
+    }
    },
    "drift_vs_previous": {
     "date": "2026-10-20",
@@ -1217,7 +1289,13 @@
     "ci": [
      0.03539719831323572,
      0.0566462838599189
-    ]
+    ],
+    "direction": {
+     "fixed": 21,
+     "broke": 18,
+     "swapped": 0,
+     "ungraded": 27
+    }
    },
    "drift_recent": {
     "n": 1472,
@@ -1321,6 +1399,7 @@
    "providers": [
     "Liquid"
    ],
+   "provider_pin": null,
    "requests": 741,
    "errors": 0,
    "error_rate": 0,
@@ -1424,7 +1503,13 @@
      0.035999541028385554,
      0.05739910012660018
     ],
-    "mean_tv": 0.03283942372740926
+    "mean_tv": 0.03283942372740926,
+    "direction": {
+     "fixed": 10,
+     "broke": 16,
+     "swapped": 1,
+     "ungraded": 40
+    }
    },
    "drift_vs_previous": {
     "date": "2026-10-20",
@@ -1434,7 +1519,13 @@
     "ci": [
      0.035999541028385554,
      0.05739910012660018
-    ]
+    ],
+    "direction": {
+     "fixed": 10,
+     "broke": 16,
+     "swapped": 1,
+     "ungraded": 40
+    }
    },
    "drift_recent": {
     "n": 1472,
@@ -1538,6 +1629,7 @@
    "providers": [
     "Liquid"
    ],
+   "provider_pin": null,
    "requests": 741,
    "errors": 0,
    "error_rate": 0,
@@ -1640,7 +1732,13 @@
      null,
      null
     ],
-    "mean_tv": null
+    "mean_tv": null,
+    "direction": {
+     "fixed": 0,
+     "broke": 0,
+     "swapped": 0,
+     "ungraded": 0
+    }
    },
    "drift_vs_previous": null,
    "drift_recent": null,
@@ -1721,6 +1819,7 @@
    "providers": [
     "Azure"
    ],
+   "provider_pin": null,
    "requests": 741,
    "errors": 0,
    "error_rate": 0,
@@ -1824,7 +1923,13 @@
      0.06985820216165456,
      0.09807418299404236
     ],
-    "mean_tv": 0.0722942124033642
+    "mean_tv": 0.0722942124033642,
+    "direction": {
+     "fixed": 31,
+     "broke": 31,
+     "swapped": 3,
+     "ungraded": 57
+    }
    },
    "drift_vs_previous": {
     "date": "2026-10-20",
@@ -1834,7 +1939,13 @@
     "ci": [
      0.06985820216165456,
      0.09807418299404236
-    ]
+    ],
+    "direction": {
+     "fixed": 31,
+     "broke": 31,
+     "swapped": 3,
+     "ungraded": 57
+    }
    },
    "drift_recent": {
     "n": 1472,
@@ -1938,6 +2049,7 @@
    "providers": [
     "DeepInfra"
    ],
+   "provider_pin": null,
    "requests": 741,
    "errors": 0,
    "error_rate": 0,
@@ -2040,7 +2152,13 @@
      null,
      null
     ],
-    "mean_tv": null
+    "mean_tv": null,
+    "direction": {
+     "fixed": 0,
+     "broke": 0,
+     "swapped": 0,
+     "ungraded": 0
+    }
    },
    "drift_vs_previous": null,
    "drift_recent": null,
@@ -2121,6 +2239,7 @@
    "providers": [
     "DeepInfra"
    ],
+   "provider_pin": null,
    "requests": 741,
    "errors": 0,
    "error_rate": 0,
@@ -2224,7 +2343,13 @@
      0.002305393099733989,
      0.009783709145384999
     ],
-    "mean_tv": 0.002469686593071587
+    "mean_tv": 0.002469686593071587,
+    "direction": {
+     "fixed": 2,
+     "broke": 3,
+     "swapped": 0,
+     "ungraded": 2
+    }
    },
    "drift_vs_previous": {
     "date": "2026-10-20",
@@ -2234,7 +2359,13 @@
     "ci": [
      0.002305393099733989,
      0.009783709145384999
-    ]
+    ],
+    "direction": {
+     "fixed": 2,
+     "broke": 3,
+     "swapped": 0,
+     "ungraded": 2
+    }
    },
    "drift_recent": {
     "n": 1472,
@@ -2338,6 +2469,7 @@
    "providers": [
     "DeepInfra"
    ],
+   "provider_pin": null,
    "requests": 741,
    "errors": 0,
    "error_rate": 0,
@@ -2441,7 +2573,13 @@
      -2.1627600115061974e-19,
      0.0026029893723012003
     ],
-    "mean_tv": 0.00004639996608356502
+    "mean_tv": 0.00004639996608356502,
+    "direction": {
+     "fixed": 0,
+     "broke": 0,
+     "swapped": 0,
+     "ungraded": 0
+    }
    },
    "drift_vs_previous": {
     "date": "2026-10-20",
@@ -2451,7 +2589,13 @@
     "ci": [
      -2.1627600115061974e-19,
      0.0026029893723012003
-    ]
+    ],
+    "direction": {
+     "fixed": 0,
+     "broke": 0,
+     "swapped": 0,
+     "ungraded": 0
+    }
    },
    "drift_recent": {
     "n": 1472,
@@ -2555,6 +2699,7 @@
    "providers": [
     "OpenAI"
    ],
+   "provider_pin": null,
    "requests": 741,
    "errors": 9,
    "error_rate": 0.012145748987854251,
@@ -2661,7 +2806,13 @@
      0,
      0.0026811058528730604
     ],
-    "mean_tv": 0
+    "mean_tv": 0,
+    "direction": {
+     "fixed": 0,
+     "broke": 0,
+     "swapped": 0,
+     "ungraded": 0
+    }
    },
    "drift_vs_previous": {
     "date": "2026-10-20",
@@ -2671,7 +2822,13 @@
     "ci": [
      0,
      0.0026811058528730604
-    ]
+    ],
+    "direction": {
+     "fixed": 0,
+     "broke": 0,
+     "swapped": 0,
+     "ungraded": 0
+    }
    },
    "drift_recent": {
     "n": 1429,
@@ -2775,6 +2932,7 @@
    "providers": [
     "Perplexity"
    ],
+   "provider_pin": null,
    "requests": 741,
    "errors": 0,
    "error_rate": 0,
@@ -2878,7 +3036,13 @@
      0.015440406968267836,
      0.030527669822628965
     ],
-    "mean_tv": 0.013514124657829302
+    "mean_tv": 0.013514124657829302,
+    "direction": {
+     "fixed": 8,
+     "broke": 8,
+     "swapped": 3,
+     "ungraded": 13
+    }
    },
    "drift_vs_previous": {
     "date": "2026-10-20",
@@ -2888,7 +3052,13 @@
     "ci": [
      0.015440406968267836,
      0.030527669822628965
-    ]
+    ],
+    "direction": {
+     "fixed": 8,
+     "broke": 8,
+     "swapped": 3,
+     "ungraded": 13
+    }
    },
    "drift_recent": {
     "n": 1472,
@@ -2992,6 +3162,7 @@
    "providers": [
     "Perplexity"
    ],
+   "provider_pin": null,
    "requests": 741,
    "errors": 0,
    "error_rate": 0,
@@ -3095,7 +3266,13 @@
      0.0067015472104669255,
      0.017583985871132073
     ],
-    "mean_tv": 0.0093062405794152
+    "mean_tv": 0.0093062405794152,
+    "direction": {
+     "fixed": 2,
+     "broke": 3,
+     "swapped": 0,
+     "ungraded": 11
+    }
    },
    "drift_vs_previous": {
     "date": "2026-10-20",
@@ -3105,7 +3282,13 @@
     "ci": [
      0.0067015472104669255,
      0.017583985871132073
-    ]
+    ],
+    "direction": {
+     "fixed": 2,
+     "broke": 3,
+     "swapped": 0,
+     "ungraded": 11
+    }
    },
    "drift_recent": {
     "n": 1472,
@@ -3209,6 +3392,7 @@
    "providers": [
     "Respan"
    ],
+   "provider_pin": null,
    "requests": 741,
    "errors": 0,
    "error_rate": 0,
@@ -3312,7 +3496,13 @@
      0.029412057021432087,
      0.04907983533341141
     ],
-    "mean_tv": 0.022339731508343917
+    "mean_tv": 0.022339731508343917,
+    "direction": {
+     "fixed": 12,
+     "broke": 14,
+     "swapped": 2,
+     "ungraded": 28
+    }
    },
    "drift_vs_previous": {
     "date": "2026-10-20",
@@ -3322,7 +3512,13 @@
     "ci": [
      0.029412057021432087,
      0.04907983533341141
-    ]
+    ],
+    "direction": {
+     "fixed": 12,
+     "broke": 14,
+     "swapped": 2,
+     "ungraded": 28
+    }
    },
    "drift_recent": {
     "n": 1472,
@@ -3426,6 +3622,7 @@
    "providers": [
     "ScaleDown"
    ],
+   "provider_pin": null,
    "requests": 741,
    "errors": 0,
    "error_rate": 0,
@@ -3529,7 +3726,13 @@
      0.003219946338039849,
      0.011579473870741363
     ],
-    "mean_tv": 0.006670348035168046
+    "mean_tv": 0.006670348035168046,
+    "direction": {
+     "fixed": 3,
+     "broke": 2,
+     "swapped": 0,
+     "ungraded": 4
+    }
    },
    "drift_vs_previous": {
     "date": "2026-10-20",
@@ -3539,7 +3742,13 @@
     "ci": [
      0.003219946338039849,
      0.011579473870741363
-    ]
+    ],
+    "direction": {
+     "fixed": 3,
+     "broke": 2,
+     "swapped": 0,
+     "ungraded": 4
+    }
    },
    "drift_recent": {
     "n": 1472,
@@ -3643,6 +3852,7 @@
    "providers": [
     "Together"
    ],
+   "provider_pin": null,
    "requests": 741,
    "errors": 0,
    "error_rate": 0,
@@ -3746,7 +3956,13 @@
      0.0036942094236708995,
      0.012460369766941424
     ],
-    "mean_tv": 0.005834120772012255
+    "mean_tv": 0.005834120772012255,
+    "direction": {
+     "fixed": 2,
+     "broke": 3,
+     "swapped": 0,
+     "ungraded": 5
+    }
    },
    "drift_vs_previous": {
     "date": "2026-10-20",
@@ -3756,7 +3972,13 @@
     "ci": [
      0.0036942094236708995,
      0.012460369766941424
-    ]
+    ],
+    "direction": {
+     "fixed": 2,
+     "broke": 3,
+     "swapped": 0,
+     "ungraded": 5
+    }
    },
    "drift_recent": {
     "n": 1472,
@@ -3860,6 +4082,7 @@
    "providers": [
     "TypeSafe"
    ],
+   "provider_pin": null,
    "requests": 741,
    "errors": 0,
    "error_rate": 0,
@@ -3963,7 +4186,13 @@
      0.007222930572573619,
      0.01841776149085649
     ],
-    "mean_tv": 0.01038715963987695
+    "mean_tv": 0.01038715963987695,
+    "direction": {
+     "fixed": 1,
+     "broke": 4,
+     "swapped": 0,
+     "ungraded": 12
+    }
    },
    "drift_vs_previous": {
     "date": "2026-10-20",
@@ -3973,7 +4202,13 @@
     "ci": [
      0.007222930572573619,
      0.01841776149085649
-    ]
+    ],
+    "direction": {
+     "fixed": 1,
+     "broke": 4,
+     "swapped": 0,
+     "ungraded": 12
+    }
    },
    "drift_recent": {
     "n": 1472,
@@ -4077,6 +4312,7 @@
    "providers": [
     "TypeSafe"
    ],
+   "provider_pin": null,
    "requests": 741,
    "errors": 0,
    "error_rate": 0,
@@ -4180,7 +4416,13 @@
      0.008278704632045567,
      0.020072305395046768
     ],
-    "mean_tv": 0.011680047760210744
+    "mean_tv": 0.011680047760210744,
+    "direction": {
+     "fixed": 3,
+     "broke": 5,
+     "swapped": 0,
+     "ungraded": 11
+    }
    },
    "drift_vs_previous": {
     "date": "2026-10-20",
@@ -4190,7 +4432,13 @@
     "ci": [
      0.008278704632045567,
      0.020072305395046768
-    ]
+    ],
+    "direction": {
+     "fixed": 3,
+     "broke": 5,
+     "swapped": 0,
+     "ungraded": 11
+    }
    },
    "drift_recent": {
     "n": 1472,
@@ -4294,6 +4542,7 @@
    "providers": [
     "Upstage"
    ],
+   "provider_pin": null,
    "requests": 741,
    "errors": 0,
    "error_rate": 0,
@@ -4397,7 +4646,13 @@
      0.05926873159117826,
      0.08562595087338974
     ],
-    "mean_tv": 0.08160720210408208
+    "mean_tv": 0.08160720210408208,
+    "direction": {
+     "fixed": 21,
+     "broke": 24,
+     "swapped": 5,
+     "ungraded": 55
+    }
    },
    "drift_vs_previous": {
     "date": "2026-10-20",
@@ -4407,7 +4662,13 @@
     "ci": [
      0.05926873159117826,
      0.08562595087338974
-    ]
+    ],
+    "direction": {
+     "fixed": 21,
+     "broke": 24,
+     "swapped": 5,
+     "ungraded": 55
+    }
    },
    "drift_recent": {
     "n": 1472,
@@ -4511,6 +4772,7 @@
    "providers": [
     "Upstage"
    ],
+   "provider_pin": null,
    "requests": 741,
    "errors": 0,
    "error_rate": 0,
@@ -4614,7 +4876,13 @@
      0.03479550578032944,
      0.055892817410994076
     ],
-    "mean_tv": 0.04370473800213645
+    "mean_tv": 0.04370473800213645,
+    "direction": {
+     "fixed": 20,
+     "broke": 15,
+     "swapped": 5,
+     "ungraded": 25
+    }
    },
    "drift_vs_previous": {
     "date": "2026-10-20",
@@ -4624,7 +4892,13 @@
     "ci": [
      0.03479550578032944,
      0.055892817410994076
-    ]
+    ],
+    "direction": {
+     "fixed": 20,
+     "broke": 15,
+     "swapped": 5,
+     "ungraded": 25
+    }
    },
    "drift_recent": {
     "n": 1472,
@@ -4728,6 +5002,7 @@
    "providers": [
     "Liquid"
    ],
+   "provider_pin": null,
    "requests": 741,
    "errors": 0,
    "error_rate": 0,
@@ -4830,7 +5105,13 @@
      null,
      null
     ],
-    "mean_tv": null
+    "mean_tv": null,
+    "direction": {
+     "fixed": 0,
+     "broke": 0,
+     "swapped": 0,
+     "ungraded": 0
+    }
    },
    "drift_vs_previous": null,
    "drift_recent": null,
@@ -4911,6 +5192,7 @@
    "providers": [
     "Liquid"
    ],
+   "provider_pin": null,
    "requests": 741,
    "errors": 0,
    "error_rate": 0,
@@ -5013,7 +5295,13 @@
      null,
      null
     ],
-    "mean_tv": null
+    "mean_tv": null,
+    "direction": {
+     "fixed": 0,
+     "broke": 0,
+     "swapped": 0,
+     "ungraded": 0
+    }
    },
    "drift_vs_previous": null,
    "drift_recent": null,
@@ -5094,6 +5382,7 @@
    "providers": [
     "Perplexity"
    ],
+   "provider_pin": null,
    "requests": 741,
    "errors": 0,
    "error_rate": 0,
@@ -5197,7 +5486,13 @@
      0.01375168557143322,
      0.028150914273970245
     ],
-    "mean_tv": 0.013346443440728
+    "mean_tv": 0.013346443440728,
+    "direction": {
+     "fixed": 8,
+     "broke": 8,
+     "swapped": 2,
+     "ungraded": 11
+    }
    },
    "drift_vs_previous": {
     "date": "2026-10-20",
@@ -5207,7 +5502,13 @@
     "ci": [
      0.01375168557143322,
      0.028150914273970245
-    ]
+    ],
+    "direction": {
+     "fixed": 8,
+     "broke": 8,
+     "swapped": 2,
+     "ungraded": 11
+    }
    },
    "drift_recent": {
     "n": 1472,
@@ -5311,6 +5612,7 @@
    "providers": [
     "Perplexity"
    ],
+   "provider_pin": null,
    "requests": 741,
    "errors": 0,
    "error_rate": 0,
@@ -5414,7 +5716,13 @@
      0.007222930572573619,
      0.01841776149085649
     ],
-    "mean_tv": 0.009377623463902656
+    "mean_tv": 0.009377623463902656,
+    "direction": {
+     "fixed": 2,
+     "broke": 3,
+     "swapped": 0,
+     "ungraded": 12
+    }
    },
    "drift_vs_previous": {
     "date": "2026-10-20",
@@ -5424,7 +5732,13 @@
     "ci": [
      0.007222930572573619,
      0.01841776149085649
-    ]
+    ],
+    "direction": {
+     "fixed": 2,
+     "broke": 3,
+     "swapped": 0,
+     "ungraded": 12
+    }
    },
    "drift_recent": {
     "n": 1472,
@@ -5528,6 +5842,7 @@
    "providers": [
     "TypeSafe"
    ],
+   "provider_pin": null,
    "requests": 741,
    "errors": 0,
    "error_rate": 0,
@@ -5631,7 +5946,13 @@
      0.008812450627554015,
      0.02089371838136943
     ],
-    "mean_tv": 0.010913894378568195
+    "mean_tv": 0.010913894378568195,
+    "direction": {
+     "fixed": 3,
+     "broke": 1,
+     "swapped": 0,
+     "ungraded": 16
+    }
    },
    "drift_vs_previous": {
     "date": "2026-10-20",
@@ -5641,7 +5962,13 @@
     "ci": [
      0.008812450627554015,
      0.02089371838136943
-    ]
+    ],
+    "direction": {
+     "fixed": 3,
+     "broke": 1,
+     "swapped": 0,
+     "ungraded": 16
+    }
    },
    "drift_recent": {
     "n": 1472,

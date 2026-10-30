@@ -85,8 +85,9 @@ export interface DecideResult {
   ok: boolean; status: number; latency_ms: number; attempts: number;
   response?: any; error?: string;
 }
-export async function decide(model: string, state: string, questions: Record<string, Question>): Promise<DecideResult> {
-  const body = JSON.stringify({ model, state, questions });
+// extra: optional request fields, e.g. { provider: { only: [...], allow_fallbacks: false } }
+export async function decide(model: string, state: string, questions: Record<string, Question>, extra: Record<string, unknown> = {}): Promise<DecideResult> {
+  const body = JSON.stringify({ model, state, questions, ...extra });
   let attempts = 0;
   let last: DecideResult = { ok: false, status: 0, latency_ms: 0, attempts: 0 };
   while (attempts < 4) {
