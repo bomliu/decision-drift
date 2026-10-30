@@ -26,7 +26,10 @@ const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, 'suite/manifest-v1.j
 const status = fs.existsSync(path.join(ROOT, 'status.json')) ? JSON.parse(fs.readFileSync(path.join(ROOT, 'status.json'), 'utf8')) : null;
 const pinsSite: Record<string, { name: string; since: string }> = Object.fromEntries(Object.entries(JSON.parse(fs.readFileSync(path.join(ROOT, 'suite/provider-pins.json'), 'utf8'))).filter(([k]) => !k.startsWith('_'))) as any;
 const excluded: Record<string, string> = JSON.parse(fs.readFileSync(path.join(ROOT, 'suite/models-excluded.json'), 'utf8'));
-const models = [...new Set(reports.flatMap(r => Object.keys(r.perModel)))].sort((a, b) => a.replace('~', '').localeCompare(b.replace('~', '')));
+// Every model a run tried (feeds the change log); only models that have answered at least once get pages and rankings.
+const seen = [...new Set(reports.flatMap(r => Object.keys(r.perModel)))].sort((a, b) => a.replace('~', '').localeCompare(b.replace('~', '')));
+const answeredOn = (m: string, r: Report) => (r.perModel[m]?.decisions ?? 0) > 0;
+const models = seen.filter(m => reports.some(r => answeredOn(m, r)));
 const slug = (m: string) => m.replace(/^~/, 'alias-').replace(/\//g, '--').replace(/[^a-zA-Z0-9.-]/g, '-');
 const history = (m: string) => reports.map(r => ({ date: r.date, p: r.perModel[m] })).filter(x => x.p);
 
@@ -317,10 +320,10 @@ const lastRunLine = () => {
 
 // ---------- pages ----------
 fs.rmSync(OUT, { recursive: true, force: true });
-const tracked = models.filter(m => latest.perModel[m] && !isAlias(m));
+const tracked = models.filter(m => latest.perModel[m] && answeredOn(m, latest) && !isAlias(m));
 const compared = tracked.filter(m => drift(m, latest)?.n);
 const fresh = tracked.filter(m => !drift(m, latest)?.n);
-const aliases = models.filter(m => latest.perModel[m] && isAlias(m));
+const aliases = models.filter(m => latest.perModel[m] && answeredOn(m, latest) && isAlias(m));
 const excess = (m: string) => drift(m, latest)!.flip_rate - latest.perModel[m].noise.flip_rate;
 const detected = compared.filter(m => verdict(m).key === 'changed').sort((a, b) => excess(b) - excess(a));
 const undetected = compared.filter(m => verdict(m).key !== 'changed').sort((a, b) => drift(a, latest)!.flip_rate - drift(b, latest)!.flip_rate || a.localeCompare(b));
@@ -335,12 +338,26 @@ const jev = latest.jev_113_vs_114;
 // A change is logged on the run where it first shows against the previous run, once the next run confirms it
 // (still different from the run before the change). Snapshot moves and new models are logged the day they happen.
 const reportOn = new Map(reports.map(r => [r.date, r]));
-type LogEntry = { date: string; m: string; kind: 'change' | 'serve' | 'new'; text: string };
+type LogEntry = { date: string; m: string; kind: 'change' | 'serve' | 'new' | 'listing' | 'outage'; text: string };
 const changeLog: LogEntry[] = [];
+// Catalog and availability, from what each run saw: first answers, listed-but-unserved, no answers, delisted.
+for (const m of seen) {
+  if (isAlias(m)) continue;
+  let everAnswered = false;
+  reports.forEach((r, i) => {
+    const p = r.perModel[m]; const was = i > 0 ? reports[i - 1].perModel[m] : undefined;
+    if (!p) { if (was) changeLog.push({ date: r.date, m, kind: 'listing', text: 'No longer listed on OpenRouter.' }); return; }
+    if (!answeredOn(m, r)) {
+      changeLog.push({ date: r.date, m, kind: everAnswered ? 'outage' : 'listing', text: everAnswered ? `No answers this run: all ${p.requests} calls failed.` : `Listed on OpenRouter, but no provider served it: all ${p.requests} calls failed.` });
+      return;
+    }
+    if (!everAnswered && r.date !== BASELINE.date) changeLog.push({ date: r.date, m, kind: 'new', text: 'Now tracked.' });
+    everAnswered = true;
+  });
+}
 for (const m of models) {
   const h = history(m);
   h.forEach(({ date, p }, i) => {
-    if (i === 0 && date !== BASELINE.date && !isAlias(m)) changeLog.push({ date, m, kind: 'new', text: 'Now tracked.' });
     if (i === 0) return;
     if (p.provider_pin && !h[i - 1].p.provider_pin) { changeLog.push({ date, m, kind: 'serve', text: `Requests now pinned to ${p.provider_pin.name}, the maker. Earlier runs were mostly answered by other hosts, so comparisons restart here.` }); return; }
     const prev = h[i - 1].p.served.join(', '), cur = p.served.join(', ');
@@ -355,7 +372,7 @@ for (const m of models) {
 }
 changeLog.sort((a, b) => b.date.localeCompare(a.date) || a.kind.localeCompare(b.kind) || a.m.localeCompare(b.m));
 const logHtml = changeLog.length ? `<h2 id="log">Log</h2><p class="sub-list">Written by the data: a change is listed once the next run confirms it. Also in the <a href="/feed.xml">RSS feed</a>.</p>
-<ol class="log">${changeLog.map(e => `<li class="log-${e.kind}"><time datetime="${e.date}">${shortDate(e.date)}</time><span><a href="/models/${slug(e.m)}/">${esc(isAlias(e.m) ? e.m : nameOf(e.m))}</a> ${esc(e.text)}</span></li>`).join('')}</ol>` : '';
+<ol class="log">${changeLog.map(e => `<li class="log-${e.kind}"><time datetime="${e.date}">${shortDate(e.date)}</time><span>${models.includes(e.m) ? `<a href="/models/${slug(e.m)}/">${esc(isAlias(e.m) ? e.m : nameOf(e.m))}</a>` : `<b>${esc(e.m)}</b>`} ${esc(e.text)}</span></li>`).join('')}</ol>` : '';
 
 // ---------- stability ranking ----------
 const COMP = [['time', 'Over time'], ['repeat', 'On repeat'], ['reorder', 'Option order'], ['reword', 'Rewording']] as const;
@@ -522,6 +539,7 @@ for (const m of models) {
     const p = byDate.get(d);
     if (d < first) return `<span class="d-future" data-tip="${shortDate(d)}: not tracked yet" tabindex="-1"></span>`;
     if (!p) return d <= latest.date ? `<span class="d-miss" data-tip="${shortDate(d)}: no run"></span>` : `<span class="d-future"></span>`;
+    if (!(p.decisions > 0)) return `<span class="d-miss" data-tip="${shortDate(d)}: no answers (${p.requests} calls failed)"></span>`;
     const dr = prevDrift(p);
     if (!dr) return `<span class="d-base" data-tip="${shortDate(d)}: first run"></span>`;
     return `<span class="${hotVs(dr, p) ? 'd-hot' : 'd-ok'}" data-tip="${shortDate(d)}: ${pct(dr.flip_rate)} changed vs ${shortDate(dr.date)}, noise ${pct(p.noise.flip_rate)}"></span>`;
@@ -587,7 +605,7 @@ write('method/index.html', page({ path: '/method/', title: 'Method', description
 <ul>
 <li><strong>Recent change:</strong> today's top answers compared with each of the last 30 days, on byte-identical requests. Each day's comparison is weighted by exponential decay (half-life 7 days), shifted to reach zero at 30 days, so a change counts most the day after it happens and stops counting after 30 stable days. A day without a run uses the closest run; days before a model was first tracked are left out.</li>
 <li><strong>Daily squares and run history:</strong> each run against the previous run. Changed answers on questions with a reference label are split into those that became right and those that became wrong. The index ignores direction: a fix still moves the probabilities someone set a threshold on.</li>
-<li><strong>Change log:</strong> a change is listed on the run where it first differs from the previous run beyond noise, once the next run confirms it. New snapshot IDs and newly tracked models are listed the day they appear.</li>
+<li><strong>Change log:</strong> a change is listed on the run where it first differs from the previous run beyond noise, once the next run confirms it. New snapshot IDs and newly tracked models are listed the day they appear, as are catalog events: a model listed on OpenRouter that no provider serves, a run where a tracked model gave no answers, and a model no longer listed. The catalog is checked once a day, at the run, so listings that come and go in between aren't seen. Models that have never answered get no page or rank.</li>
 <li><strong>Noise:</strong> share that differs when 100 inputs are sent again minutes later, pooled over the last 7 days. A change is detected only when its 95% interval sits above the noise interval. A noisier model needs a bigger change to be detected; that cost shows up in its index through the repeat component.</li>
 <li><strong>Option shuffle, paraphrase:</strong> share that changes when choice options are reordered, or instructions reworded with the same meaning.</li>
 <li><strong>Gold accuracy:</strong> on questions where the reference label and two LLM labelers (GPT-6.1 Sol, Gemini 4 Argon) agree. A person reviewed a 50-item sample before launch and corrected 23 labels. These are the clearer cases, so this is a regression check, not a ranking.</li>
@@ -625,7 +643,7 @@ ${s.models_with_errors.length ? `<p>More than 5% errors: ${s.models_with_errors.
 // feeds and machine-readable files
 const feedItems = [
   ...posts.map(p => ({ title: p.title, link: `${SITE}/posts/${p.slug}/`, date: p.date, desc: p.summary })),
-  ...changeLog.map(e => ({ title: `${isAlias(e.m) ? e.m : nameOf(e.m)}: ${e.kind === 'change' ? 'change detected' : e.kind === 'serve' ? 'new snapshot' : 'now tracked'}`, link: `${SITE}/models/${slug(e.m)}/`, date: e.date, desc: e.text })),
+  ...changeLog.map(e => ({ title: `${isAlias(e.m) ? e.m : nameOf(e.m)}: ${e.kind === 'listing' || e.kind === 'outage' ? e.text.split(':')[0].replace(/\.$/, '').toLowerCase() : ({ change: 'change detected', serve: 'new snapshot', new: 'now tracked' } as Record<string, string>)[e.kind]}`, link: models.includes(e.m) ? `${SITE}/models/${slug(e.m)}/` : `${SITE}/changes/#log`, date: e.date, desc: e.text })),
 ].sort((a, b) => b.date.localeCompare(a.date));
 fs.writeFileSync(path.join(OUT, 'feed.xml'), `<?xml version="1.0" encoding="UTF-8"?><rss version="2.0"><channel><title>Decision Drift</title><link>${SITE}/</link><description>Daily measurements of whether decision models change their answers.</description>${feedItems.map(i => `<item><title>${esc(i.title)}</title><link>${i.link}</link><guid isPermaLink="false">${esc(i.link + '#' + i.date + '-' + i.title)}</guid><pubDate>${new Date(i.date + 'T12:00:00Z').toUTCString()}</pubDate><description>${esc(i.desc)}</description></item>`).join('')}</channel></rss>`);
 const pages = ['/', '/changes/', '/models/', '/posts/', '/method/', '/data/', '/status/', ...models.map(m => `/models/${slug(m)}/`), ...(jev ? ['/findings/jev-1-13-vs-1-14/'] : []), ...posts.map(p => `/posts/${p.slug}/`)];
