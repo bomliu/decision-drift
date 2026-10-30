@@ -61,7 +61,7 @@ function flips(a: Answers | Lite, b: Answers | Lite, crossRequest = false): numb
 // time recalibrated Oct 29 when it became the decayed recent change;
 // frozen so a score moves only when the model's behavior does), then weighted. 100 = an average model; lower is better.
 // Over time is the decayed recent change (see recentChange) above the model's own noise.
-const WEIGHTS = { time: 0.4, repeat: 0.3, reorder: 0.15, reword: 0.15 };
+const WEIGHTS = { time: 0.45, repeat: 0.3, reorder: 0.1, reword: 0.15 };
 const SCALES = { time: 0.0036, repeat: 0.0175, reorder: 0.026, reword: 0.086 };
 function stability(time: number[] | null, timeNoise: number, repeat: number[], reorder: number[], reword: number[]) {
   const avg = (xs: number[]) => xs.length ? xs.reduce((s, v) => s + v, 0) / xs.length : 0;
