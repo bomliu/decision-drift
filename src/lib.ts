@@ -86,6 +86,9 @@ export interface DecideResult {
   response?: any; error?: string;
 }
 // extra: optional request fields, e.g. { provider: { only: [...], allow_fallbacks: false } }
+// Error bodies from OpenRouter can carry the account user_id; strip it before anything is saved or published.
+export const redact = (t: string) => t.replace(/,?\s*"user_id"\s*:\s*"[^"]*"/g, '').replace(/\buser_[A-Za-z0-9]{10,}\b/g, 'user_[redacted]');
+
 export async function decide(model: string, state: string, questions: Record<string, Question>, extra: Record<string, unknown> = {}): Promise<DecideResult> {
   const body = JSON.stringify({ model, state, questions, ...extra });
   let attempts = 0;
@@ -98,11 +101,11 @@ export async function decide(model: string, state: string, questions: Record<str
       const latency_ms = Math.round(performance.now() - t0);
       const text = await r.text();
       if (r.ok) return { ok: true, status: r.status, latency_ms, attempts, response: JSON.parse(text) };
-      last = { ok: false, status: r.status, latency_ms, attempts, error: text.slice(0, 500) };
+      last = { ok: false, status: r.status, latency_ms, attempts, error: redact(text).slice(0, 500) };
       if (r.status === 429 || r.status >= 500) { await sleep(1000 * 2 ** attempts); continue; }
       return last; // 4xx other than 429: not retryable
     } catch (e: any) {
-      last = { ok: false, status: 0, latency_ms: Math.round(performance.now() - t0), attempts, error: String(e?.message ?? e) };
+      last = { ok: false, status: 0, latency_ms: Math.round(performance.now() - t0), attempts, error: redact(String(e?.message ?? e)) };
       await sleep(1000 * 2 ** attempts);
     }
   }

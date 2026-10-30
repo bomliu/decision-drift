@@ -664,7 +664,7 @@
    "errors": 12,
    "error_rate": 1,
    "error_samples": [
-    "404 {\"error\":{\"message\":\"No endpoints found for cloudflare/clairic.\",\"code\":404},\"user_id\":\"user_39mQEbNRdmAE7LzyMtrOvaGXAWx"
+    "404 {\"error\":{\"message\":\"No endpoints found for cloudflare/clairic.\",\"code\":404}}"
    ],
    "latency_p50": null,
    "latency_p95": null,

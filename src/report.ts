@@ -2,7 +2,7 @@
 // Usage: node src/report.ts --date 2026-10-20 --run day1 [--dup day1-dup] [--compare-date 2026-10-20 --compare-run pilot]
 import fs from 'node:fs';
 import path from 'node:path';
-import { ROOT, type Item, loadItems, rng } from './lib.ts';
+import { ROOT, type Item, loadItems, rng, redact } from './lib.ts';
 import { normalize, loadRun, tv, goldMatches, quantile, mean, wilson, type Rec, type Norm } from './answers.ts';
 
 const args = Object.fromEntries(process.argv.slice(2).reduce<string[][]>((acc, a, i, all) => {
@@ -150,7 +150,7 @@ for (const m of models) {
   perModel[m] = {
     served, providers, provider_pin: pins[m]?.since && pins[m].since <= date ? pins[m] : null,
     requests: recs.length, errors: recs.length - ok.length, error_rate: (recs.length - ok.length) / Math.max(1, recs.length),
-    error_samples: [...new Set(recs.filter(r => !r.ok).map(r => `${r.status} ${String(r.error).slice(0, 120)}`))].slice(0, 3),
+    error_samples: [...new Set(recs.filter(r => !r.ok).map(r => `${r.status} ${redact(String(r.error)).slice(0, 120)}`))].slice(0, 3),
     latency_p50: quantile(lat, 0.5), latency_p95: quantile(lat, 0.95),
     cost_run: cost, cost_per_1k_states: baseRecs.length ? cost / recs.length * 1000 : NaN,
     decisions: base.size,
