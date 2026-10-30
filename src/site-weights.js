@@ -65,8 +65,28 @@
   }
 
   const current = () => Object.fromEntries(inputs.map(i => [i.dataset.k, +i.value]));
-  const set = w => { inputs.forEach(i => { i.value = Math.round(w[i.dataset.k] * 100); }); render(current()); };
-  inputs.forEach(i => i.addEventListener('input', () => render(current())));
+  const sum = xs => xs.reduce((a, b) => a + b, 0);
+  // Split `total` across sliders in proportion to their current values (equally if all are 0), as whole numbers.
+  function share(vals, total) {
+    const t = sum(vals); const raw = vals.map(v => (t ? v / t : 1 / vals.length) * total);
+    const out = raw.map(Math.floor); let left = total - sum(out);
+    raw.map((r, j) => [r - out[j], j]).sort((a, b) => b[0] - a[0]).forEach(([, j]) => { if (left > 0) { out[j]++; left--; } });
+    return out;
+  }
+  // Sliders always add up to 100. Moving one leaves the sliders before it alone and splits what is left across
+  // the sliders after it. The last slider has none after it, so it trades with the one just before it.
+  function rebalance(changed) {
+    const vals = inputs.map(x => +x.value); const i = inputs.indexOf(changed);
+    if (i === inputs.length - 1) {
+      const fixed = sum(vals.slice(0, i - 1)); vals[i] = Math.min(vals[i], 100 - fixed); vals[i - 1] = 100 - fixed - vals[i];
+    } else {
+      const fixed = sum(vals.slice(0, i)); vals[i] = Math.min(vals[i], 100 - fixed);
+      share(vals.slice(i + 1), 100 - fixed - vals[i]).forEach((v, j) => { vals[i + 1 + j] = v; });
+    }
+    inputs.forEach((x, j) => { x.value = vals[j]; });
+  }
+  const set = w => { const v = share(keys.map(k => w[k]), 100); inputs.forEach((x, j) => { x.value = v[j]; }); render(current()); };
+  inputs.forEach(i => i.addEventListener('input', () => { rebalance(i); render(current()); }));
   box.querySelectorAll('[data-preset]').forEach(b => b.addEventListener('click', () => set(b.dataset.preset === 'equal' ? Object.fromEntries(keys.map(k => [k, 0.25])) : W.defaults)));
   btn.addEventListener('click', () => { box.hidden = !box.hidden; btn.setAttribute('aria-expanded', !box.hidden); });
 
