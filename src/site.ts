@@ -157,7 +157,7 @@ code{font-size:.92em;background:var(--soft);padding:.05em .3em;border-radius:3px
 /* key */
 .key{display:flex;flex-wrap:wrap;gap:8px 22px;font-size:14px;color:var(--muted);margin:0 0 10px}
 .key i{display:inline-block;vertical-align:-2px;margin-right:7px}
-.k-band{width:26px;height:12px;background:var(--band);border-radius:3px}.k-dot{width:11px;height:11px;border-radius:50%;background:var(--dot)}.k-hot{width:11px;height:11px;border-radius:50%;background:var(--hot)}
+.k-band{width:26px;height:12px;background:var(--band);border-radius:3px}.k-dot{width:11px;height:11px;border-radius:50%;background:var(--dot)}.k-hot{width:11px;height:11px;border-radius:50%;background:var(--hot)}.key .k-ci{width:22px;height:2px;background:var(--ink);opacity:.5;vertical-align:4px}
 /* dot chart */
 .dc{--name:15rem;--note:16rem}
 .dc-axis,.dc-row{display:grid;grid-template-columns:var(--name) minmax(0,1fr) var(--note);gap:0 18px;align-items:center}
@@ -179,6 +179,9 @@ code{font-size:.92em;background:var(--soft);padding:.05em .3em;border-radius:3px
 .track{position:relative;height:26px;background:linear-gradient(var(--rule),var(--rule)) left center/100% 1px no-repeat}
 .track .grid{position:absolute;top:0;bottom:0;width:1px;background:var(--soft)}
 .track .band{position:absolute;left:0;top:7px;height:12px;border-radius:3px;background:var(--band)}
+.track .ci{position:absolute;top:12px;height:2px;background:var(--ink);opacity:.5}
+.track .ci::before,.track .ci::after{content:"";position:absolute;top:-3px;width:1px;height:8px;background:inherit}.track .ci::before{left:0}.track .ci::after{right:0}
+.is-hot .track .ci{background:var(--hot);opacity:.8}
 .track .dot{position:absolute;top:7px;width:12px;height:12px;margin-left:-6px;border-radius:50%;background:var(--dot);box-shadow:0 0 0 2px var(--bg)}
 .is-hot .track .dot{background:var(--hot)}
 .track .hit{position:absolute;top:1px;width:24px;height:24px;margin-left:-12px;border-radius:50%}
@@ -323,7 +326,7 @@ const detected = compared.filter(m => verdict(m).key === 'changed').sort((a, b) 
 const undetected = compared.filter(m => verdict(m).key !== 'changed').sort((a, b) => drift(a, latest)!.flip_rate - drift(b, latest)!.flip_rate || a.localeCompare(b));
 const ordered = [...detected, ...undetected];
 // axis fits the changed-answer values; wide noise bands clip at the right edge
-const scaleMax = Math.max(0.04, Math.ceil((Math.max(...ordered.map(m => drift(m, latest)!.flip_rate)) + 0.005) / 0.02) * 0.02);
+const scaleMax = Math.max(0.04, Math.ceil((Math.max(...ordered.map(m => drift(m, latest)!.ci[1])) + 0.005) / 0.02) * 0.02);
 const xPct = (v: number) => (100 * Math.min(v, scaleMax) / scaleMax).toFixed(2) + '%';
 const ticks = Array.from({ length: Math.round(scaleMax / 0.02) + 1 }, (_, i) => i * 0.02);
 const jev = latest.jev_113_vs_114;
@@ -470,7 +473,7 @@ const chart = `<div class="dc" role="group" aria-label="Recent change in answers
   const tip = `${nameOf(m)}: ${pct(d.flip_rate)} recent change (95% CI ${ci(d.ci)}). Noise ${pct(p.noise.flip_rate)}.`;
   const grp = i === 0 && detected.length ? `<li class="dc-grp">Change detected</li>` : i === detected.length ? `<li class="dc-grp">No change detected, steadiest first</li>` : '';
   return `${grp}<li class="dc-row${hot ? ' is-hot' : ''}"><a class="nm" href="/models/${slug(m)}/"><b>${esc(nameOf(m))}</b><small>${esc(vendorName(m))}</small></a>
-<div class="track">${ticks.slice(1, -1).map(t => `<span class="grid" style="left:${xPct(t)}"></span>`).join('')}<span class="band" style="width:${xPct(p.noise.ci[1])}" title="Noise: changes up to ${pct(p.noise.ci[1])} can't be told apart from it"></span><span class="dot" style="left:${xPct(d.flip_rate)}"></span><span class="hit" style="left:${xPct(d.flip_rate)}" tabindex="0" data-tip="${esc(tip)}" aria-label="${esc(tip)}"></span><span class="val${x > 0.82 ? ' flip' : ''}" style="left:${xPct(d.flip_rate)}">${pct(d.flip_rate)}</span></div>
+<div class="track">${ticks.slice(1, -1).map(t => `<span class="grid" style="left:${xPct(t)}"></span>`).join('')}<span class="band" style="width:${xPct(p.noise.ci[1])}" title="Noise: changes up to ${pct(p.noise.ci[1])} can't be told apart from it"></span><span class="ci" style="left:${xPct(d.ci[0])};width:calc(${xPct(d.ci[1])} - ${xPct(d.ci[0])})"></span><span class="dot" style="left:${xPct(d.flip_rate)}"></span><span class="hit" style="left:${xPct(d.flip_rate)}" tabindex="0" data-tip="${esc(tip)}" aria-label="${esc(tip)}"></span><span class="val${d.ci[1] / scaleMax > 0.82 ? ' flip' : ''}" style="left:${xPct(d.ci[1] / scaleMax > 0.82 ? d.ci[0] : Math.max(d.ci[1], d.flip_rate))}">${pct(d.flip_rate)}</span></div>
 <div class="nt">${notes(m).map(esc).join(' ')}</div></li>`;
 }).join('')}</ol></div>`;
 
@@ -482,13 +485,13 @@ ${posts.length ? `<h2>Findings</h2><ul class="posts">${posts.slice(0, 3).map(p =
 
 write('changes/index.html', page({ path: '/changes/', title: 'Recent answer changes', description: 'How much each decision model\'s answers changed over the last 30 days, against its own noise.', body: `
 <div class="rk-top"><h1>Recent answer changes</h1><span class="wm" aria-hidden="true">decisiondrift.dev</span></div>
-<p class="dek">${compared.length} models. Today's answers against each run in the last 30 days, recent days weighted more (half-life 7 days). A change inside the grey band can't be told apart from the model's own noise, so noisier models hide bigger changes.</p>
-<div class="key"><span><i class="k-band"></i>Noise: same request sent twice</span><span><i class="k-dot"></i>Recent change</span><span><i class="k-hot"></i>Change detected</span></div>
+<p class="dek">${compared.length} models. Today's answers against each run in the last 30 days, recent days weighted more (half-life 7 days). The grey band runs to the top of the model's noise interval. A change is detected only when its whole interval line clears the band, so noisier models hide bigger changes.</p>
+<div class="key"><span><i class="k-band"></i>Noise: same request sent twice</span><span><i class="k-dot"></i>Recent change</span><span><i class="k-ci"></i>Its 95% interval</span><span><i class="k-hot"></i>Change detected</span></div>
 ${chart}
 ${fresh.length ? `<p class="sub-list">First run, no comparison yet: ${fresh.map(m => `<a href="/models/${slug(m)}/">${esc(nameOf(m))}</a>`).join(', ')}.</p>` : ''}
 ${logHtml}
 ${aliases.length ? `<p class="sub-list">Aliases: ${aliases.map(m => `<a href="/models/${slug(m)}/">${esc(m)}</a> serves ${esc(latest.perModel[m].served.join(', ').replace(/^[^/]+\//, ''))}`).join('; ')}.</p>` : ''}
-<p class="foot">${lastRunLine()} Detected: the 95% interval for changed answers sits above the noise interval. Noise pools up to 7 days of repeats. <a href="/method/">Method</a>.</p>` }));
+<p class="foot">${lastRunLine()} Detected: the 95% interval for recent change sits entirely above the noise interval. Noise pools up to 7 days of repeats. <a href="/method/">Method</a>.</p>` }));
 
 // models table
 const modelRow = (m: string) => {
