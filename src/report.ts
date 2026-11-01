@@ -179,7 +179,7 @@ function pair(a: string, b: string) {
   const byT: Record<string, any> = {}, byF: Record<string, any> = {};
   for (const t of ['noul', 'choice', 'score']) byT[t] = compare(A, B, k => qType(k) === t);
   for (const f of [...new Set(items.map(i => i.family))]) byF[f] = compare(A, B, k => fam(k) === f);
-  return { overall: compare(A, B), by_type: byT, by_family: byF };
+  return { overall: compare(A, B), by_type: byT, by_family: byF, direction: direction(A, B) };
 }
 const jev = pair('typesafe/jev-1.13', 'typesafe/jev-1.14');
 
@@ -193,7 +193,7 @@ const families = models.filter(m => m.startsWith('~') && m.endsWith('-latest')).
     .sort((a, b) => { const x = verKey(a.slice(base.length)), y = verKey(b.slice(base.length)); for (let i = 0; i < Math.max(x.length, y.length); i++) { const d = (x[i] ?? -1) - (y[i] ?? -1); if (d) return d; } return 0; });
   const served = perModel[alias]?.served?.[0] ?? '';
   const current = members.filter(m => served.startsWith(m)).sort((a, b) => b.length - a.length)[0] ?? null;
-  const pairs = members.flatMap((a, i) => members.slice(i + 1).map(b => { const p = pair(a, b); return p && { a, b, overall: p.overall, by_type: p.by_type }; })).filter(Boolean);
+  const pairs = members.flatMap((a, i) => members.slice(i + 1).map(b => { const p = pair(a, b); return p && { a, b, overall: p.overall, by_type: p.by_type, by_family: p.by_family, direction: p.direction }; })).filter(Boolean);
   return { alias, base, members, current, pairs };
 }).filter(f => f.members.length > 1);
 

@@ -51,8 +51,8 @@
       let used = 0;
       const segs = keys.filter(k => r.parts[k] > 0.05).map(k => { const room = Math.max(0, ax.max - used); const v = Math.min(r.parts[k], room); used += r.parts[k]; return v > 0 ? '<span class="seg s-' + k + '" style="width:' + X(v) + '"></span>' : ''; }).join('');
       const tip = r.m.name + ': ' + r.index.toFixed(0) + '. ' + W.comps.map(c => c[1] + ' ' + r.parts[c[0]].toFixed(0)).join(', ');
-      return '<div class="rk-row" role="row"><span class="rk-n" role="cell">' + (i + 1) + '</span><a class="rk-nm" role="cell" href="' + r.m.href + '"><b>' + esc(r.m.name) + '</b><small>' + esc(r.m.vendor) + '</small>' +
-        (r.m.flag ? '<em class="flag">▲ change detected</em>' : '') + '</a><span class="rk-bar" role="cell"><span class="stack' + (r.index > ax.max ? ' over' : '') + '" tabindex="0" data-tip="' + esc(tip) + '" aria-label="' + esc(tip) + '">' +
+      return '<div class="rk-row" role="row"><span class="rk-n" role="cell">' + (i + 1) + '</span><span class="rk-nm" role="cell"><a href="' + r.m.href + '"><b>' + esc(r.m.name) + '</b><small>' + esc(r.m.vendor) + '</small></a>' +
+        (r.m.flag ? '<em class="flag">▲ change detected</em>' : '') + (r.m.ver ? '<a class="ver" href="' + r.m.ver.href + '">' + esc(r.m.ver.text) + ' →</a>' : '') + '</span><span class="rk-bar" role="cell"><span class="stack' + (r.index > ax.max ? ' over' : '') + '" tabindex="0" data-tip="' + esc(tip) + '" aria-label="' + esc(tip) + '">' +
         (segs || '<span class="seg zero"></span>') + '</span></span><span class="rk-v" role="cell">' + r.index.toFixed(0) + '</span></div>';
     }).join('');
     panel.innerHTML = head + body;

@@ -101,7 +101,7 @@ const servedLine = (m: string, p: any) => {
   if (p.provider_pin) return `${by}, pinned to the maker since ${shortDate(p.provider_pin.since)}. Earlier runs were mostly answered by other hosts, so comparisons start there.`;
   return p.providers.includes(FIRST_PARTY[vendorOf(m)]) ? `${by}.` : `${by}, ${p.providers.length > 1 ? 'third-party hosts' : 'a third-party host'}; the maker doesn't serve it on OpenRouter.`;
 };
-const VENDOR: Record<string, string> = { typesafe: 'TypeSafe', perplexity: 'Perplexity', microsoft: 'Microsoft', cloudflare: 'Cloudflare', liquid: 'Liquid', 'nace-ai': 'Nace.AI', inception: 'Inception', upstage: 'Upstage', respan: 'Respan', togethercomputer: 'Together', jaredpalmer: 'Jared Palmer', scaledown: 'ScaleDown', openai: 'OpenAI' };
+const VENDOR: Record<string, string> = { baseten: 'Baseten', typesafe: 'TypeSafe', perplexity: 'Perplexity', microsoft: 'Microsoft', cloudflare: 'Cloudflare', liquid: 'Liquid', 'nace-ai': 'Nace.AI', inception: 'Inception', upstage: 'Upstage', respan: 'Respan', togethercomputer: 'Together', jaredpalmer: 'Jared Palmer', scaledown: 'ScaleDown', openai: 'OpenAI' };
 const vendorOf = (m: string) => m.replace(/^~/, '').split('/')[0];
 const vendorName = (m: string) => VENDOR[vendorOf(m)] ?? vendorOf(m);
 const nameOf = (m: string) => m.replace(/^~/, '').split('/').slice(1).join('/');
@@ -207,7 +207,8 @@ code{font-size:.92em;background:var(--soft);padding:.05em .3em;border-radius:3px
 .rk-head span:last-child,.rk-v{text-align:right}
 .rk-row{min-height:34px;padding:3px 0}
 .rk-n{color:var(--faint);font-size:14px;text-align:right}
-.rk-nm{color:var(--ink);text-decoration:none;font-size:14px;line-height:1.25;overflow-wrap:anywhere}.rk-nm:hover b{text-decoration:underline;text-decoration-color:var(--rule)}
+.rk-nm{font-size:14px;line-height:1.25;overflow-wrap:anywhere}.rk-nm>a:first-child{color:var(--ink);text-decoration:none}.rk-nm>a:first-child:hover b{text-decoration:underline;text-decoration-color:var(--rule)}
+.rk-nm .ver{display:block;font-size:12px;color:var(--muted);text-decoration:none}.rk-nm .ver:hover{color:var(--ink);text-decoration:underline}
 .rk-nm b{font-weight:600}.rk-nm small{color:var(--faint);font-size:12px;margin-left:5px}
 .rk-row:first-of-type .rk-nm b{font-weight:700}
 .rk-bar{position:relative;height:22px}
@@ -231,6 +232,9 @@ h2.sect{font-size:28px;margin:52px 0 6px}.dek.small{font-size:16px;margin-bottom
 .rk-tools button:hover{border-color:var(--faint)}.rk-tools button[aria-pressed="true"]{background:var(--soft)}
 button:focus-visible{outline:2px solid var(--link);outline-offset:2px}
 .rk-sub{color:var(--muted);font-size:15px;margin:0 0 10px}
+table.vers td{white-space:nowrap}
+details.tasks{margin:10px 0 0}details.tasks summary{cursor:pointer;color:var(--muted);font-size:14px}details.tasks table{margin-top:8px}
+.ver-line{font-size:15px;margin:14px 0 0}.ver-line a{font-weight:600}
 .rk-nm .flag{display:block;font-style:normal;font-size:12px;font-weight:600;color:var(--hot)}
 .rk-bar .stack.over::after{content:"";position:absolute;right:-1px;top:-2px;bottom:-2px;width:6px;background:repeating-linear-gradient(135deg,var(--bg) 0 2px,transparent 2px 4px)}
 .rk-bar .seg.zero{width:2px;background:var(--faint)}
@@ -293,7 +297,7 @@ footer.site a{color:var(--faint)}
 const TIP_JS = `const t=document.getElementById('tip');function show(el){t.textContent=el.dataset.tip;t.style.display='block';const r=el.getBoundingClientRect();t.style.left=Math.max(8,Math.min(innerWidth-290,r.left))+'px';t.style.top=(r.top-40)+'px'}
 const tipOf=e=>e.target.closest&&e.target.closest('[data-tip]');document.addEventListener('mouseover',e=>{const el=tipOf(e);if(el)show(el);else t.style.display='none'});document.addEventListener('focusin',e=>{const el=tipOf(e);if(el)show(el)});document.addEventListener('focusout',()=>t.style.display='none');`;
 
-const NAV: [string, string][] = [['/models/', 'Models'], ['/changes/', 'Changes'], ['/method/', 'Method'], ['/data/', 'Data']];
+const NAV: [string, string][] = [['/models/', 'Models'], ['/changes/', 'Changes'], ['/versions/', 'Versions'], ['/method/', 'Method'], ['/data/', 'Data']];
 function page(p: { path: string; title: string; description: string; body: string }) {
   const full = p.path === '/' ? 'Decision Drift: daily answer drift in decision models' : `${p.title} · Decision Drift`;
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -306,7 +310,7 @@ function page(p: { path: string; title: string; description: string; body: strin
 <style>${CSS}</style>${UMAMI}</head><body><div class="wrap">
 <header class="mast"><a class="mark" href="/">Decision Drift</a><nav aria-label="Main">${NAV.map(([h, l]) => `<a href="${h}"${p.path.startsWith(h) ? ' aria-current="page"' : ''}>${l}</a>`).join('')}</nav></header>
 <main id="main">${p.body}</main>
-<footer class="site">Independent; not affiliated with any model vendor. Runs daily at 10:17 UTC; <a href="/status/">last run ${footRun()}</a>. <a href="${REPO}/issues">Feedback</a> · <a href="${REPO}">Source</a> · Code MIT, data CC BY 4.0.</footer>
+<footer class="site">Independent; not affiliated with any model vendor. Runs daily at 10:17 UTC; <a href="/status/">last run ${footRun()}</a>. Feedback: <a href="mailto:hello@decisiondrift.dev">hello@decisiondrift.dev</a> or <a href="${REPO}/issues">GitHub</a> · <a href="${REPO}">Source</a> · Code MIT, data CC BY 4.0.</footer>
 </div><div id="tip" role="tooltip"></div><script>${TIP_JS}</script></body></html>`;
 }
 function footRun() { const r = status?.last_run; return r ? `${shortDate(r.date)}, ${utcTime(r.finished_at)}${r.status === 'ok' ? '' : ', had problems'}` : shortDate(latest.date); }
@@ -332,6 +336,13 @@ const xPct = (v: number) => (100 * Math.min(v, scaleMax) / scaleMax).toFixed(2) 
 const ticks = Array.from({ length: Math.round(scaleMax / 0.02) + 1 }, (_, i) => i * 0.02);
 const families: any[] = (latest as any).families ?? [];
 const familyOf = (m: string) => families.find(fam => fam.members.includes(m));
+const famName = (fam: any) => `${vendorName(fam.members[0])} ${nameOf(fam.base).replace(/^[a-z]+$/, (w: string) => w[0].toUpperCase() + w.slice(1))}`;
+const famId = (fam: any) => fam.alias.slice(1, -'-latest'.length).replace(/\//g, '-');
+const TASK: Record<string, string> = { banking77: 'Banking intents', claim: 'Claim checking', clinc: 'Assistant intents', entity: 'Record matching', guardrail: 'Content moderation', logs: 'Log triage', rag: 'Retrieval relevance', review: 'Review sentiment', support: 'Support routing', tool: 'Tool selection', value: 'Field extraction' };
+// The alias's current version against the version before it, e.g. Jev 1.14 vs 1.13
+const upgradeOf = (fam: any) => { const i = fam.members.indexOf(fam.current); if (i < 1) return null; const p = fam.pairs.find((x: any) => x.a === fam.members[i - 1] && x.b === fam.current); return p ? { fam, from: fam.members[i - 1], to: fam.current, p } : null; };
+const upgrades = families.map(upgradeOf).filter(Boolean) as any[];
+const verNote = (m: string) => { const u = upgrades.find(x => x.to === m); return u ? { text: `${pct(u.p.overall.flip_rate)} differ from ${nameOf(u.from)}`, href: `/versions/#${famId(u.fam)}` } : null; };
 
 // ---------- change log: generated from the data, no prose ----------
 // A change is logged on the run where it first shows against the previous run, once the next run confirms it
@@ -433,7 +444,7 @@ ${p.id === 'overall' ? `<div class="rk-weights" id="rk-weights" hidden><div clas
 ${p.rows.map(r => {
   const over = r.value > p.max;
   let used = 0; const segs = r.segs.filter(s => s.v > 0.05).map(s => { const room = Math.max(0, p.max - used); const v = Math.min(s.v, room); used += s.v; return v > 0 ? `<span class="seg s-${s.k}" style="width:${w(v)}"></span>` : ''; }).join('');
-  return `${r.sep ? '<div class="rk-sep" role="presentation"></div>' : ''}<div class="rk-row" role="row"><span class="rk-n" role="cell">${r.rank}</span><a class="rk-nm" role="cell" href="/models/${slug(r.m)}/"><b>${esc(nameOf(r.m))}</b><small>${esc(vendorName(r.m))}</small>${r.flag ? '<em class="flag">▲ change detected</em>' : ''}</a>
+  return `${r.sep ? '<div class="rk-sep" role="presentation"></div>' : ''}<div class="rk-row" role="row"><span class="rk-n" role="cell">${r.rank}</span><span class="rk-nm" role="cell"><a href="/models/${slug(r.m)}/"><b>${esc(nameOf(r.m))}</b><small>${esc(vendorName(r.m))}</small></a>${r.flag ? '<em class="flag">▲ change detected</em>' : ''}${p.id === 'overall' && verNote(r.m) ? `<a class="ver" href="${verNote(r.m)!.href}">${esc(verNote(r.m)!.text)} →</a>` : ''}</span>
 <span class="rk-bar" role="cell"><span class="stack${over ? ' over' : ''}" tabindex="0" data-tip="${esc(r.tip)}" aria-label="${esc(r.tip)}">${segs || '<span class="seg zero"></span>'}</span>${r.ci ? `<span class="whisk" style="left:${w(r.ci[0])};width:calc(${w(r.ci[1])} - ${w(r.ci[0])})"></span>` : ''}</span><span class="rk-v" role="cell">${r.label}</span></div>`;
 }).join('')}</div></div>`;
 }
@@ -442,7 +453,7 @@ const rankTable = `<div class="rk-table" id="rk-table" hidden><table><thead><tr>
 // data the PNG export draws from (only what is on screen)
 const exportData = { date: latest.date, provisional, panels: panels.map(p => ({ id: p.id, title: p.title, sub: p.sub, unit: p.unit, max: p.max, ticks: p.ticks,
   rows: p.rows.map(r => ({ rank: r.rank, name: nameOf(r.m), vendor: vendorName(r.m), segs: r.segs, value: r.value, label: r.label, ci: r.ci ?? null, sep: r.sep, flag: r.flag })) })),
-  weights: { comps: COMP, scales: stOf(ranked[0]).scales, defaults: stOf(ranked[0]).weights, models: ranked.map(m => ({ name: nameOf(m), vendor: vendorName(m), href: `/models/${slug(m)}/`, flag: flagged.has(m), c: stOf(m).components })) } };
+  weights: { comps: COMP, scales: stOf(ranked[0]).scales, defaults: stOf(ranked[0]).weights, models: ranked.map(m => ({ name: nameOf(m), vendor: vendorName(m), href: `/models/${slug(m)}/`, flag: flagged.has(m), ver: verNote(m), c: stOf(m).components })) } };
 
 const RANK_JS = `(()=>{const tabs=[...document.querySelectorAll('.rk-tabs [role=tab]')];const panels=[...document.querySelectorAll('.rk-panel')];const table=document.getElementById('rk-table');const tbtn=document.getElementById('rk-tablebtn');
 function select(id,push){tabs.forEach(t=>{const on=t.dataset.id===id;t.setAttribute('aria-selected',on);t.tabIndex=on?0:-1});panels.forEach(p=>p.hidden=p.id!=='panel-'+id||!table.hidden);if(push)history.replaceState(null,'',id==='overall'?location.pathname:'#'+id)}
@@ -468,11 +479,11 @@ const a=document.createElement('a');a.download='decision-drift-'+P.id+'-'+D.date
 
 const rankSection = `<section class="rk-wrap" aria-labelledby="rk-title">
 <div class="rk-top"><h1 id="rk-title">Most stable decision models</h1><span class="wm" aria-hidden="true">decisiondrift.dev</span></div>
-${provisional ? `<p class="prov">Provisional until ${shortDate(finalOn)}.</p>` : ''}
 <div class="rk-bar-top"><div class="rk-tabs" role="tablist" aria-label="Ranking view">${panels.map((p, i) => `<button type="button" role="tab" id="tab-${p.id}" data-id="${p.id}" aria-controls="panel-${p.id}" aria-selected="${i === 0}" tabindex="${i === 0 ? 0 : -1}">${esc(p.tab)}</button>`).join('')}</div>
 <div class="rk-tools"><button type="button" id="rk-wbtn" aria-expanded="false" aria-controls="rk-weights">Weights</button><button type="button" id="rk-link">Copy link</button><button type="button" id="rk-png">Download image</button><button type="button" id="rk-tablebtn" aria-pressed="false">Table</button></div></div>
 ${panels.map((p, i) => panelHtml(p, i === 0)).join('')}
 ${rankTable}
+${upgrades.length ? `<p class="ver-line">Upgrading changes answers: ${upgrades.map(u => `<a href="/versions/#${famId(u.fam)}">${esc(vendorName(u.to))} ${esc(nameOf(u.from))} → ${esc(nameOf(u.to))}</a> ${pct(u.p.overall.flip_rate)}`).join(' · ')}</p>` : ''}
 <p class="foot"><a href="/method/#stability">How the index works</a></p>
 <p id="rk-toast" class="toast" role="status" hidden></p>
 <script type="application/json" id="rk-data">${JSON.stringify(exportData).replace(/</g, '\\u003c')}</script>
@@ -519,9 +530,6 @@ write('models/index.html', page({ path: '/models/', title: 'Models', description
 <h1>Models</h1><p class="dek">${shortDate(latest.date)}. Ranked by instability index, lower is better. Other columns: share of answers that changed.</p>
 <table class="tbl-models">${tableHead}<tbody>${[...ranked, ...tracked.filter(m => !rankOf.has(m)).sort(byVendor)].map(modelRow).join('')}</tbody></table>
 ${aliases.length ? `<h2>Aliases</h2><table class="tbl-models">${tableHead}<tbody>${aliases.map(modelRow).join('')}</tbody></table>` : ''}
-${families.length ? `<h2 id="versions">Versions</h2><p class="sub-list">Families with a "-latest" alias. Share of questions where two versions answer differently, today.</p>
-${families.map((fam: any) => `<h3>${esc(vendorName(fam.members[0]))} ${esc(nameOf(fam.base).replace(/^[a-z]+$/, (w: string) => w[0].toUpperCase() + w.slice(1)))}</h3><p class="note"><code>${esc(fam.alias)}</code> serves ${esc(fam.current ? nameOf(fam.current) : '?')}.</p>
-<table class="narrow"><thead><tr><th class="l">Versions</th><th>Differ</th><th class="opt">95% CI</th><th>Score</th><th>Yes/no</th><th>Pick one</th></tr></thead><tbody>${fam.pairs.map((p: any) => `<tr><td class="l"><a href="/models/${slug(p.a)}/">${esc(nameOf(p.a))}</a> → <a href="/models/${slug(p.b)}/">${esc(nameOf(p.b))}</a></td><td><b>${pct(p.overall.flip_rate)}</b></td><td class="opt">${ci(p.overall.ci)}</td><td>${pct(p.by_type.score.flip_rate)}</td><td>${pct(p.by_type.noul.flip_rate)}</td><td>${pct(p.by_type.choice.flip_rate)}</td></tr>`).join('')}</tbody></table>`).join('')}` : ''}
 <h2>Not tracked</h2><p class="sub-list">${Object.entries(excluded).map(([m, why]) => `<code>${esc(m)}</code>: ${esc(why)}`).join(' ')}</p>` }));
 
 // per-model pages
@@ -551,7 +559,7 @@ for (const m of models) {
   write(`models/${slug(m)}/index.html`, page({ path: `/models/${slug(m)}/`, title: m, description: `Daily drift, noise and robustness for ${m}.`, body: `
 <p class="crumb"><a href="/models/">Models</a> / ${esc(isAlias(m) ? 'Aliases' : vendorName(m))}</p>
 <h1>${esc(isAlias(m) ? m : nameOf(m))}</h1>
-<p class="meta">${isAlias(m) ? `Alias. Serves ${esc(last.served.join(', '))}.` : `Snapshot ${esc(last.served.join(', '))}. ${servedLine(m, last)}`}${familyOf(m) ? ` <a href="/models/#versions">Compare versions</a>.` : ''}</p>
+<p class="meta">${isAlias(m) ? `Alias. Serves ${esc(last.served.join(', '))}.` : `Snapshot ${esc(last.served.join(', '))}. ${servedLine(m, last)}`}${familyOf(m) ? ` <a href="/versions/#${famId(familyOf(m))}">Compare versions</a>.` : ''}</p>
 <div class="stats"><div><b>${rankOf.has(m) ? `#${rankOf.get(m)} of ${ranked.length}` : '—'}</b><span>${rankOf.has(m) ? `stability, index ${last.stability.index.toFixed(0)}${provisional || runsOf(m) < MIN_RUNS ? ', provisional' : ''}` : 'not ranked yet'}</span></div><div><b class="${hot ? 'hot' : ''}">${d?.n ? pct(d.flip_rate) : '—'}</b><span>recent change${hot ? ', change detected' : ''}</span></div><div><b>${pct(last.noise.flip_rate)}</b><span>noise</span></div><div><b>${pct(last.accuracy)}</b><span>gold accuracy</span></div></div>
 <h2>Daily runs</h2>
 <div class="days" role="img" aria-label="One square per day, each compared with the previous run">${squares}</div>
@@ -570,8 +578,17 @@ ${last.errors ? `<h2>Errors, latest run</h2><p class="note">${last.errors} of ${
 ` }));
 }
 
+// versions
+const dirCell = (p: any) => `${p.direction.fixed} / ${p.direction.broke}`;
+write('versions/index.html', page({ path: '/versions/', title: 'Versions', description: 'How much a decision model\'s answers change between versions.', body: `
+<h1>Versions</h1><p class="dek">How much answers change between versions of the same model. Families with a "-latest" alias, compared on ${shortDate(latest.date)}.</p>
+${families.map((fam: any) => `<h2 id="${famId(fam)}">${esc(famName(fam))}</h2><p class="note"><code>${esc(fam.alias)}</code> serves ${esc(fam.current ? nameOf(fam.current) : '?')}.</p>
+<table class="vers"><thead><tr><th class="l">Versions</th><th>Differ</th><th class="opt">95% CI</th><th>Right / wrong</th><th class="opt">Score</th><th class="opt">Yes/no</th><th class="opt">Pick one</th></tr></thead><tbody>${fam.pairs.map((p: any) => `<tr><td class="l"><a href="/models/${slug(p.a)}/">${esc(nameOf(p.a))}</a> → <a href="/models/${slug(p.b)}/">${esc(nameOf(p.b))}</a></td><td><b>${pct(p.overall.flip_rate)}</b></td><td class="opt">${ci(p.overall.ci)}</td><td>${dirCell(p)}</td><td class="opt">${pct(p.by_type.score.flip_rate)}</td><td class="opt">${pct(p.by_type.noul.flip_rate)}</td><td class="opt">${pct(p.by_type.choice.flip_rate)}</td></tr>`).join('')}</tbody></table>
+${fam.pairs.map((p: any) => `<details class="tasks"><summary>By task${fam.pairs.length > 1 ? `: ${esc(nameOf(p.a))} → ${esc(nameOf(p.b))}` : ''}</summary><table class="narrow"><thead><tr><th class="l">Task</th><th>Questions</th><th>Differ</th><th class="opt">95% CI</th></tr></thead><tbody>${Object.entries<any>(p.by_family).filter(([, v]) => v.n).sort((a, b) => b[1].flip_rate - a[1].flip_rate).map(([k, v]) => `<tr><td class="l">${esc(TASK[k] ?? k)}</td><td>${v.n}</td><td>${pct(v.flip_rate)}</td><td class="opt">${ci(v.ci)}</td></tr>`).join('')}</tbody></table></details>`).join('')}`).join('')}
+<p class="note">Right / wrong: changed answers on labeled questions that became right or wrong in the newer version.</p>` }));
+
 // moved pages
-redirect('findings/jev-1-13-vs-1-14/index.html', '/models/#versions');
+redirect('findings/jev-1-13-vs-1-14/index.html', '/versions/');
 if (posts.length) {
   write('posts/index.html', page({ path: '/posts/', title: 'Findings', description: 'Write-ups from the Decision Drift tracker.', body: `<h1>Findings</h1><ul class="posts">${posts.map(p => `<li><a href="/posts/${p.slug}/">${esc(p.title)}</a><div class="when">${dateLong(p.date)}</div></li>`).join('')}</ul>` }));
   for (const p of posts) write(`posts/${p.slug}/index.html`, page({ path: `/posts/${p.slug}/`, title: p.title, description: p.summary, body: `<article><h1>${esc(p.title)}</h1>${p.html.replace(/<div class="table-wrap">/g, '<div class="tw">')}</article>` }));
@@ -630,7 +647,7 @@ const feedItems = [
   ...changeLog.map(e => ({ title: `${isAlias(e.m) ? e.m : nameOf(e.m)}: ${e.kind === 'listing' || e.kind === 'outage' ? e.text.split(':')[0].replace(/\.$/, '').replace(/^./, c => c.toLowerCase()) : ({ change: 'change detected', serve: 'new snapshot', new: 'now tracked' } as Record<string, string>)[e.kind]}`, link: models.includes(e.m) ? `${SITE}/models/${slug(e.m)}/` : `${SITE}/changes/#log`, date: e.date, desc: e.text })),
 ].sort((a, b) => b.date.localeCompare(a.date));
 fs.writeFileSync(path.join(OUT, 'feed.xml'), `<?xml version="1.0" encoding="UTF-8"?><rss version="2.0"><channel><title>Decision Drift</title><link>${SITE}/</link><description>Daily measurements of whether decision models change their answers.</description>${feedItems.map(i => `<item><title>${esc(i.title)}</title><link>${i.link}</link><guid isPermaLink="false">${esc(i.link + '#' + i.date + '-' + i.title)}</guid><pubDate>${new Date(i.date + 'T12:00:00Z').toUTCString()}</pubDate><description>${esc(i.desc)}</description></item>`).join('')}</channel></rss>`);
-const pages = ['/', '/changes/', '/models/', '/method/', '/data/', '/status/', ...models.map(m => `/models/${slug(m)}/`), ...(posts.length ? ['/posts/', ...posts.map(p => `/posts/${p.slug}/`)] : [])];
+const pages = ['/', '/changes/', '/versions/', '/models/', '/method/', '/data/', '/status/', ...models.map(m => `/models/${slug(m)}/`), ...(posts.length ? ['/posts/', ...posts.map(p => `/posts/${p.slug}/`)] : [])];
 fs.writeFileSync(path.join(OUT, 'sitemap.xml'), `<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${pages.map(p => `<url><loc>${SITE}${p}</loc></url>`).join('')}</urlset>`);
 fs.writeFileSync(path.join(OUT, 'robots.txt'), `User-agent: *\nAllow: /\nSitemap: ${SITE}/sitemap.xml\n`);
 fs.writeFileSync(path.join(OUT, 'llms.txt'), `# Decision Drift
@@ -645,7 +662,7 @@ ${families.map((fam: any) => fam.pairs.map((p: any) => `${nameOf(p.a)} vs ${name
 - [Ranking](${SITE}/): most stable decision models, by instability index
 - [Changes](${SITE}/changes/): recent answer changes per model (last 30 days, decay-weighted), against each model's noise, plus a change log
 - [Models](${SITE}/models/): latest metrics table
-- [Versions](${SITE}/models/#versions): how much versions of the same model differ
+- [Versions](${SITE}/versions/): how much versions of the same model differ
 - [Method](${SITE}/method/): suite design, metrics, limits
 ${posts.map(p => `- [${p.title}](${SITE}/posts/${p.slug}/): ${p.summary}`).join('\n')}
 
