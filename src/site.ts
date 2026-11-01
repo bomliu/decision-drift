@@ -394,7 +394,7 @@ const groupOf = new Map<string, number>(); { let g = 0, leaderHi = -Infinity;
   for (const m of ranked) { const st = latest.perModel[m].stability; if (st.ci[0] > leaderHi) { g++; leaderHi = st.ci[1]; } groupOf.set(m, g); } }
 const rankOf = new Map(ranked.map((m, i) => [m, i + 1]));
 const maxRuns = Math.max(...ranked.map(runsOf));
-const provisional = maxRuns < MIN_RUNS;
+const provisional = false; // the provisional label was dropped at launch
 // one run per day from here, so the ranking firms up MIN_RUNS - maxRuns days after the latest run
 const finalOn = new Date(new Date(latest.date + 'T00:00:00Z').getTime() + 864e5 * Math.max(0, MIN_RUNS - maxRuns)).toISOString().slice(0, 10);
 const stOf = (m: string) => latest.perModel[m].stability;
@@ -560,7 +560,7 @@ for (const m of models) {
 <p class="crumb"><a href="/models/">Models</a> / ${esc(isAlias(m) ? 'Aliases' : vendorName(m))}</p>
 <h1>${esc(isAlias(m) ? m : nameOf(m))}</h1>
 <p class="meta">${isAlias(m) ? `Alias. Serves ${esc(last.served.join(', '))}.` : `Snapshot ${esc(last.served.join(', '))}. ${servedLine(m, last)}`}${familyOf(m) ? ` <a href="/versions/#${famId(familyOf(m))}">Compare versions</a>.` : ''}</p>
-<div class="stats"><div><b>${rankOf.has(m) ? `#${rankOf.get(m)} of ${ranked.length}` : '—'}</b><span>${rankOf.has(m) ? `stability, index ${last.stability.index.toFixed(0)}${provisional || runsOf(m) < MIN_RUNS ? ', provisional' : ''}` : 'not ranked yet'}</span></div><div><b class="${hot ? 'hot' : ''}">${d?.n ? pct(d.flip_rate) : '—'}</b><span>recent change${hot ? ', change detected' : ''}</span></div><div><b>${pct(last.noise.flip_rate)}</b><span>noise</span></div><div><b>${pct(last.accuracy)}</b><span>gold accuracy</span></div></div>
+<div class="stats"><div><b>${rankOf.has(m) ? `#${rankOf.get(m)} of ${ranked.length}` : '—'}</b><span>${rankOf.has(m) ? `stability, index ${last.stability.index.toFixed(0)}` : 'not ranked yet'}</span></div><div><b class="${hot ? 'hot' : ''}">${d?.n ? pct(d.flip_rate) : '—'}</b><span>recent change${hot ? ', change detected' : ''}</span></div><div><b>${pct(last.noise.flip_rate)}</b><span>noise</span></div><div><b>${pct(last.accuracy)}</b><span>gold accuracy</span></div></div>
 <h2>Daily runs</h2>
 <div class="days" role="img" aria-label="One square per day, each compared with the previous run">${squares}</div>
 <div class="days-axis"><span>${shortDate(dayList[0])}</span><span>${shortDate(dayList.at(-1)!)}</span></div>
