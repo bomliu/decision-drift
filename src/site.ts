@@ -348,8 +348,14 @@ const verNote = (m: string) => { const u = upgrades.find(x => x.to === m); retur
 // A change is logged on the run where it first shows against the previous run, once the next run confirms it
 // (still different from the run before the change). Snapshot moves and new models are logged the day they happen.
 const reportOn = new Map(reports.map(r => [r.date, r]));
-type LogEntry = { date: string; m: string; kind: 'change' | 'serve' | 'new' | 'listing' | 'outage'; text: string };
+type LogEntry = { date: string; m: string; kind: 'change' | 'serve' | 'new' | 'listing' | 'outage' | 'sameday'; text: string };
 const changeLog: LogEntry[] = [];
+// Many unrelated models changing on the same run points at OpenRouter (or this harness), not at each vendor.
+const dayNum = (d: string) => Math.round(new Date(d + 'T00:00:00Z').getTime() / 864e5);
+const SAME_DAY_MODELS = 4, SAME_DAY_VENDORS = 3;
+const changedOn = new Map(reports.map(r => [r.date, models.filter(m => !isAlias(m) && answeredOn(m, r) && hotVs(prevDrift(r.perModel[m]), r.perModel[m]))]));
+const sameDays = new Set([...changedOn].filter(([, ms]) => ms.length >= SAME_DAY_MODELS && new Set(ms.map(vendorOf)).size >= SAME_DAY_VENDORS).map(([d]) => d));
+for (const d of sameDays) { const ms = changedOn.get(d)!; changeLog.push({ date: d, m: '', kind: 'sameday', text: `${ms.length} models from ${new Set(ms.map(vendorOf)).size} vendors changed on the same run, which points to a change on OpenRouter's side rather than at each vendor.` }); }
 // Catalog and availability, from what each run saw: first answers, listed-but-unserved, no answers, delisted.
 for (const m of seen) {
   if (isAlias(m)) continue;
@@ -377,12 +383,12 @@ for (const m of models) {
     const before = next.drift_recent?.by_run?.find((b: any) => b.date === d.date);
     if (!(before ? hotVs(before, next) : hotVs(drift(m, reportOn.get(h[i + 1].date)!), next))) return;
     const span = Math.round((new Date(date).getTime() - new Date(d.date).getTime()) / 864e5) > 1 ? `between ${shortDate(d.date)} and ${shortDate(date)}` : `on ${shortDate(date)}`;
-    changeLog.push({ date, m, kind: 'change', text: `Changed ${span}: ${pct(d.flip_rate)} of answers differ from the previous run, against ${pct(p.noise.flip_rate)} noise.${cur === prev ? ' Same snapshot ID.' : ''}${d.direction ? ` Graded answers: ${d.direction.fixed} became right, ${d.direction.broke} became wrong.` : ''}` });
+    changeLog.push({ date, m, kind: 'change', text: `Changed ${span}: ${pct(d.flip_rate)} of answers differ from the previous run, against ${pct(p.noise.flip_rate)} noise.${cur === prev ? ' Same snapshot ID.' : ''}${d.direction ? ` Graded answers: ${d.direction.fixed} became right, ${d.direction.broke} became wrong.` : ''}${sameDays.has(date) ? ' Changed alongside several other models; possibly OpenRouter-side.' : ''}` });
   });
 }
 changeLog.sort((a, b) => b.date.localeCompare(a.date) || a.kind.localeCompare(b.kind) || a.m.localeCompare(b.m));
 const logHtml = changeLog.length ? `<h2 id="log">Log</h2><p class="sub-list">Changes are listed once the next run confirms them. <a href="/feed.xml">RSS</a></p>
-<ol class="log">${changeLog.map(e => `<li class="log-${e.kind}"><time datetime="${e.date}">${shortDate(e.date)}</time><span>${models.includes(e.m) ? `<a href="/models/${slug(e.m)}/">${esc(isAlias(e.m) ? e.m : nameOf(e.m))}</a>` : `<b>${esc(e.m)}</b>`} ${esc(e.text)}</span></li>`).join('')}</ol>` : '';
+<ol class="log">${changeLog.map(e => `<li class="log-${e.kind}"><time datetime="${e.date}">${shortDate(e.date)}</time><span>${!e.m ? '' : models.includes(e.m) ? `<a href="/models/${slug(e.m)}/">${esc(isAlias(e.m) ? e.m : nameOf(e.m))}</a> ` : `<b>${esc(e.m)}</b> `}${esc(e.text)}</span></li>`).join('')}</ol>` : '';
 
 // ---------- stability ranking ----------
 const COMP = [['time', 'Over time'], ['repeat', 'On repeat'], ['reorder', 'Option order'], ['reword', 'Rewording']] as const;
@@ -509,6 +515,7 @@ ${rankSection}
 write('changes/index.html', page({ path: '/changes/', title: 'Recent answer changes', description: 'How much each decision model\'s answers changed over the last 30 days, against its own noise.', body: `
 <div class="rk-top"><h1>Recent answer changes</h1><span class="wm" aria-hidden="true">decisiondrift.dev</span></div>
 <p class="dek">Today's answers against the last 30 days, recent days weighted more. Flagged when the whole interval clears the noise band.</p>
+${[...sameDays].filter(d => dayNum(latest.date) - dayNum(d) <= 30).map(d => `<p class="callout">${shortDate(d)}: ${changedOn.get(d)!.length} models changed on the same run. That points to a change on OpenRouter's side, not at each vendor.</p>`).join('')}
 <div class="key"><span><i class="k-band"></i>Noise: same request sent twice</span><span><i class="k-dot"></i>Recent change</span><span><i class="k-ci"></i>Its 95% interval</span><span><i class="k-hot"></i>Change detected</span></div>
 ${chart}
 ${fresh.length ? `<p class="sub-list">First run, no comparison yet: ${fresh.map(m => `<a href="/models/${slug(m)}/">${esc(nameOf(m))}</a>`).join(', ')}.</p>` : ''}
@@ -608,7 +615,7 @@ write('method/index.html', page({ path: '/method/', title: 'Method', description
 <ul>
 <li><strong>Recent change:</strong> today's top answers against each run in the last 30 days, weighted by recency (half-life 7 days, zero at 30).</li>
 <li><strong>Noise:</strong> answers that change when 100 inputs are re-sent minutes later, pooled over 7 days.</li>
-<li><strong>Change detected:</strong> the change's 95% interval sits entirely above the noise interval.</li>
+<li><strong>Change detected:</strong> the change's 95% interval sits entirely above the noise interval. When ${SAME_DAY_MODELS}+ models from ${SAME_DAY_VENDORS}+ vendors change on the same run, it's marked as possibly a change on OpenRouter's side.</li>
 <li><strong>Option order, rewording:</strong> answers that change when options are shuffled or instructions reworded.</li>
 <li><strong>Accuracy:</strong> on clear-cut questions with an agreed answer. A sanity check, not a ranking.</li>
 </ul>
@@ -644,7 +651,7 @@ ${s.models_with_errors.length ? `<p>More than 5% errors: ${s.models_with_errors.
 // feeds and machine-readable files
 const feedItems = [
   ...posts.map(p => ({ title: p.title, link: `${SITE}/posts/${p.slug}/`, date: p.date, desc: p.summary })),
-  ...changeLog.map(e => ({ title: `${isAlias(e.m) ? e.m : nameOf(e.m)}: ${e.kind === 'listing' || e.kind === 'outage' ? e.text.split(':')[0].replace(/\.$/, '').replace(/^./, c => c.toLowerCase()) : ({ change: 'change detected', serve: 'new snapshot', new: 'now tracked' } as Record<string, string>)[e.kind]}`, link: models.includes(e.m) ? `${SITE}/models/${slug(e.m)}/` : `${SITE}/changes/#log`, date: e.date, desc: e.text })),
+  ...changeLog.map(e => ({ title: e.kind === 'sameday' ? 'Several models changed on the same run' : `${isAlias(e.m) ? e.m : nameOf(e.m)}: ${e.kind === 'listing' || e.kind === 'outage' ? e.text.split(':')[0].replace(/\.$/, '').replace(/^./, c => c.toLowerCase()) : ({ change: 'change detected', serve: 'new snapshot', new: 'now tracked' } as Record<string, string>)[e.kind]}`, link: models.includes(e.m) ? `${SITE}/models/${slug(e.m)}/` : `${SITE}/changes/#log`, date: e.date, desc: e.text })),
 ].sort((a, b) => b.date.localeCompare(a.date));
 fs.writeFileSync(path.join(OUT, 'feed.xml'), `<?xml version="1.0" encoding="UTF-8"?><rss version="2.0"><channel><title>Decision Drift</title><link>${SITE}/</link><description>Daily measurements of whether decision models change their answers.</description>${feedItems.map(i => `<item><title>${esc(i.title)}</title><link>${i.link}</link><guid isPermaLink="false">${esc(i.link + '#' + i.date + '-' + i.title)}</guid><pubDate>${new Date(i.date + 'T12:00:00Z').toUTCString()}</pubDate><description>${esc(i.desc)}</description></item>`).join('')}</channel></rss>`);
 const pages = ['/', '/changes/', '/versions/', '/models/', '/method/', '/data/', '/status/', ...models.map(m => `/models/${slug(m)}/`), ...(posts.length ? ['/posts/', ...posts.map(p => `/posts/${p.slug}/`)] : [])];
