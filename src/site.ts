@@ -13,7 +13,7 @@ const REPO = 'https://github.com/bomliu/decision-drift';
 const BASELINE = { date: '2026-10-20', run: 'day1' };
 
 // ---------- data ----------
-type Report = { date: string; run: string; perModel: Record<string, any>; jev_113_vs_114: any; cross_model_mean_majority_share: number; items: number; models: number };
+type Report = { date: string; run: string; perModel: Record<string, any>; families?: any[]; cross_model_mean_majority_share: number; items: number; models: number };
 const reportsDir = path.join(ROOT, 'reports');
 const reports: Report[] = fs.readdirSync(reportsDir).filter(f => f.endsWith('.json'))
   .map(f => JSON.parse(fs.readFileSync(path.join(reportsDir, f), 'utf8')))
@@ -293,7 +293,7 @@ footer.site a{color:var(--faint)}
 const TIP_JS = `const t=document.getElementById('tip');function show(el){t.textContent=el.dataset.tip;t.style.display='block';const r=el.getBoundingClientRect();t.style.left=Math.max(8,Math.min(innerWidth-290,r.left))+'px';t.style.top=(r.top-40)+'px'}
 const tipOf=e=>e.target.closest&&e.target.closest('[data-tip]');document.addEventListener('mouseover',e=>{const el=tipOf(e);if(el)show(el);else t.style.display='none'});document.addEventListener('focusin',e=>{const el=tipOf(e);if(el)show(el)});document.addEventListener('focusout',()=>t.style.display='none');`;
 
-const NAV: [string, string][] = [['/models/', 'Models'], ['/changes/', 'Changes'], ['/posts/', 'Findings'], ['/method/', 'Method'], ['/data/', 'Data']];
+const NAV: [string, string][] = [['/models/', 'Models'], ['/changes/', 'Changes'], ['/method/', 'Method'], ['/data/', 'Data']];
 function page(p: { path: string; title: string; description: string; body: string }) {
   const full = p.path === '/' ? 'Decision Drift: daily answer drift in decision models' : `${p.title} · Decision Drift`;
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -306,17 +306,15 @@ function page(p: { path: string; title: string; description: string; body: strin
 <style>${CSS}</style>${UMAMI}</head><body><div class="wrap">
 <header class="mast"><a class="mark" href="/">Decision Drift</a><nav aria-label="Main">${NAV.map(([h, l]) => `<a href="${h}"${p.path.startsWith(h) ? ' aria-current="page"' : ''}>${l}</a>`).join('')}</nav></header>
 <main id="main">${p.body}</main>
-<footer class="site">Independent; not affiliated with any model vendor. Runs daily at 10:17 UTC. <a href="/status/">Run status</a>. <a href="${REPO}">Source and raw data</a>. Code MIT; data CC BY 4.0, except CLINC150-derived items (CC BY 3.0).</footer>
+<footer class="site">Independent; not affiliated with any model vendor. Runs daily at 10:17 UTC; <a href="/status/">last run ${footRun()}</a>. <a href="${REPO}/issues">Feedback</a> · <a href="${REPO}">Source</a> · Code MIT, data CC BY 4.0.</footer>
 </div><div id="tip" role="tooltip"></div><script>${TIP_JS}</script></body></html>`;
 }
+function footRun() { const r = status?.last_run; return r ? `${shortDate(r.date)}, ${utcTime(r.finished_at)}${r.status === 'ok' ? '' : ', had problems'}` : shortDate(latest.date); }
+// A moved page: tells browsers and crawlers where it went.
+function redirect(rel: string, to: string) { write(rel, `<!doctype html><meta charset="utf-8"><title>Moved</title><link rel="canonical" href="${SITE}${to}"><meta http-equiv="refresh" content="0; url=${to}"><p><a href="${to}">Moved here</a>.</p>`); }
 function write(rel: string, content: string) {
   const f = path.join(OUT, rel); fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(f, content);
 }
-const lastRunLine = () => {
-  const s = status?.last_run;
-  const when = s ? `${shortDate(s.date)}, ${utcTime(s.finished_at)}` : shortDate(latest.date);
-  return s && s.status !== 'ok' ? `Last run ${when} had problems; see <a href="/status/">run status</a>.` : `Last run ${when}. Next run 10:17 UTC.`;
-};
 
 // ---------- pages ----------
 fs.rmSync(OUT, { recursive: true, force: true });
@@ -332,7 +330,8 @@ const ordered = [...detected, ...undetected];
 const scaleMax = Math.max(0.04, Math.ceil((Math.max(...ordered.map(m => drift(m, latest)!.ci[1])) + 0.005) / 0.02) * 0.02);
 const xPct = (v: number) => (100 * Math.min(v, scaleMax) / scaleMax).toFixed(2) + '%';
 const ticks = Array.from({ length: Math.round(scaleMax / 0.02) + 1 }, (_, i) => i * 0.02);
-const jev = latest.jev_113_vs_114;
+const families: any[] = (latest as any).families ?? [];
+const familyOf = (m: string) => families.find(fam => fam.members.includes(m));
 
 // ---------- change log: generated from the data, no prose ----------
 // A change is logged on the run where it first shows against the previous run, once the next run confirms it
@@ -371,7 +370,7 @@ for (const m of models) {
   });
 }
 changeLog.sort((a, b) => b.date.localeCompare(a.date) || a.kind.localeCompare(b.kind) || a.m.localeCompare(b.m));
-const logHtml = changeLog.length ? `<h2 id="log">Log</h2><p class="sub-list">Written by the data: a change is listed once the next run confirms it. Also in the <a href="/feed.xml">RSS feed</a>.</p>
+const logHtml = changeLog.length ? `<h2 id="log">Log</h2><p class="sub-list">Changes are listed once the next run confirms them. <a href="/feed.xml">RSS</a></p>
 <ol class="log">${changeLog.map(e => `<li class="log-${e.kind}"><time datetime="${e.date}">${shortDate(e.date)}</time><span>${models.includes(e.m) ? `<a href="/models/${slug(e.m)}/">${esc(isAlias(e.m) ? e.m : nameOf(e.m))}</a>` : `<b>${esc(e.m)}</b>`} ${esc(e.text)}</span></li>`).join('')}</ol>` : '';
 
 // ---------- stability ranking ----------
@@ -469,14 +468,12 @@ const a=document.createElement('a');a.download='decision-drift-'+P.id+'-'+D.date
 
 const rankSection = `<section class="rk-wrap" aria-labelledby="rk-title">
 <div class="rk-top"><h1 id="rk-title">Most stable decision models</h1><span class="wm" aria-hidden="true">decisiondrift.dev</span></div>
-<p class="dek">${ranked.length} models. The same ${latest.items} inputs and ${(manifest.splits.public.questions + manifest.splits.private.questions).toLocaleString()} questions, every day.</p>
-${provisional ? `<p class="prov">Provisional: ${maxRuns} daily runs so far. Final after ${MIN_RUNS}, on ${shortDate(finalOn)}.</p>` : ''}
-${flagged.size ? `<p class="callout"><b>Recent change detected:</b> ${[...flagged].map(m => `<a href="/models/${slug(m)}/">${esc(nameOf(m))}</a> ${pct(drift(m, latest)!.flip_rate)}${notes(m).includes('Same snapshot ID.') ? ' (same snapshot ID)' : ''}`).join(', ')}. <a href="/changes/">All changes</a>.</p>` : ''}
+${provisional ? `<p class="prov">Provisional until ${shortDate(finalOn)}.</p>` : ''}
 <div class="rk-bar-top"><div class="rk-tabs" role="tablist" aria-label="Ranking view">${panels.map((p, i) => `<button type="button" role="tab" id="tab-${p.id}" data-id="${p.id}" aria-controls="panel-${p.id}" aria-selected="${i === 0}" tabindex="${i === 0 ? 0 : -1}">${esc(p.tab)}</button>`).join('')}</div>
 <div class="rk-tools"><button type="button" id="rk-wbtn" aria-expanded="false" aria-controls="rk-weights">Weights</button><button type="button" id="rk-link">Copy link</button><button type="button" id="rk-png">Download image</button><button type="button" id="rk-tablebtn" aria-pressed="false">Table</button></div></div>
 ${panels.map((p, i) => panelHtml(p, i === 0)).join('')}
 ${rankTable}
-<p class="foot">Lines separate groups whose intervals don't overlap. Over time counts only change beyond the model's own noise. <a href="/method/#stability">How the index works</a>. ${lastRunLine()}</p>
+<p class="foot"><a href="/method/#stability">How the index works</a></p>
 <p id="rk-toast" class="toast" role="status" hidden></p>
 <script type="application/json" id="rk-data">${JSON.stringify(exportData).replace(/</g, '\\u003c')}</script>
 <script>${RANK_JS}</script>
@@ -496,19 +493,17 @@ const chart = `<div class="dc" role="group" aria-label="Recent change in answers
 
 write('index.html', page({ path: '/', title: 'Most stable decision models', description: 'Daily ranking of decision models (Jev, Clef, Decider, Luna and more) by how often their answers change.', body: `
 ${rankSection}
-${jev ? `<h2>Jev 1.14 vs 1.13</h2><p>Different top answer on ${pct(jev.overall.flip_rate)} of questions (95% CI ${ci(jev.overall.ci)}). Score answers: ${pct(jev.by_type.score.flip_rate)}. <code>~typesafe/jev-latest</code> serves 1.14. <a href="/findings/jev-1-13-vs-1-14/">Breakdown</a>.</p>` : ''}
-${posts.length ? `<h2>Findings</h2><ul class="posts">${posts.slice(0, 3).map(p => `<li><a href="/posts/${p.slug}/">${esc(p.title)}</a><div class="when">${dateLong(p.date)}</div></li>`).join('')}</ul>` : ''}
 ` }));
 
 write('changes/index.html', page({ path: '/changes/', title: 'Recent answer changes', description: 'How much each decision model\'s answers changed over the last 30 days, against its own noise.', body: `
 <div class="rk-top"><h1>Recent answer changes</h1><span class="wm" aria-hidden="true">decisiondrift.dev</span></div>
-<p class="dek">${compared.length} models. Today's answers against each run in the last 30 days, recent days weighted more (half-life 7 days). The grey band runs to the top of the model's noise interval. A change is detected only when its whole interval line clears the band, so noisier models hide bigger changes.</p>
+<p class="dek">Today's answers against the last 30 days, recent days weighted more. Flagged when the whole interval clears the noise band.</p>
 <div class="key"><span><i class="k-band"></i>Noise: same request sent twice</span><span><i class="k-dot"></i>Recent change</span><span><i class="k-ci"></i>Its 95% interval</span><span><i class="k-hot"></i>Change detected</span></div>
 ${chart}
 ${fresh.length ? `<p class="sub-list">First run, no comparison yet: ${fresh.map(m => `<a href="/models/${slug(m)}/">${esc(nameOf(m))}</a>`).join(', ')}.</p>` : ''}
 ${logHtml}
 ${aliases.length ? `<p class="sub-list">Aliases: ${aliases.map(m => `<a href="/models/${slug(m)}/">${esc(m)}</a> serves ${esc(latest.perModel[m].served.join(', ').replace(/^[^/]+\//, ''))}`).join('; ')}.</p>` : ''}
-<p class="foot">${lastRunLine()} Detected: the 95% interval for recent change sits entirely above the noise interval. Noise pools up to 7 days of repeats. <a href="/method/">Method</a>.</p>` }));
+` }));
 
 // models table
 const modelRow = (m: string) => {
@@ -516,15 +511,18 @@ const modelRow = (m: string) => {
   const rk = rankOf.get(m); const st = p.stability;
   return `<tr><td class="num-rank">${rk ?? ''}</td><td class="l"><a href="/models/${slug(m)}/">${esc(isAlias(m) ? m : nameOf(m))}</a><small>${esc(isAlias(m) ? 'serves ' + p.served.join(', ') : vendorName(m))}</small></td>
 <td>${rk && st ? `<b>${st.index.toFixed(0)}</b>` : '—'}</td><td class="${hot ? 'hot' : ''}">${d?.n ? pct(d.flip_rate) : '—'}${hot ? '<small class="hot">detected</small>' : ''}</td><td>${pct(p.noise.flip_rate)}</td><td class="opt">${pct(p.shuffle.flip_rate)}</td><td class="opt">${pct(p.paraphrase.flip_rate)}</td>
-<td>${pct(p.accuracy)}<small>${ci(p.accuracy_ci)}</small></td><td class="opt">${ms(p.latency_p50)}</td></tr>`;
+<td class="opt">${ms(p.latency_p50)}</td></tr>`;
 };
-const tableHead = `<thead><tr><th>#</th><th class="l">Model</th><th>Index</th><th>Recent<span class="long"> change</span></th><th>Noise</th><th class="opt">Option shuffle</th><th class="opt">Paraphrase</th><th>Gold<span class="long"> accuracy</span></th><th class="opt">Median latency</th></tr></thead>`;
+const tableHead = `<thead><tr><th>#</th><th class="l">Model</th><th>Index</th><th>Recent<span class="long"> change</span></th><th>Noise</th><th class="opt">Option shuffle</th><th class="opt">Paraphrase</th><th class="opt">Median latency</th></tr></thead>`;
 const byVendor = (a: string, b: string) => vendorName(a).localeCompare(vendorName(b)) || nameOf(a).localeCompare(nameOf(b));
 write('models/index.html', page({ path: '/models/', title: 'Models', description: 'Drift, noise, robustness, accuracy and latency for every tracked decision model.', body: `
-<h1>Models</h1><p class="dek">Latest run, ${shortDate(latest.date)}. Ranked by instability index, lower is better${provisional ? ' (provisional)' : ''}. Other columns are shares of top answers. Gold accuracy covers the clearer questions only.</p>
+<h1>Models</h1><p class="dek">${shortDate(latest.date)}. Ranked by instability index, lower is better. Other columns: share of answers that changed.</p>
 <table class="tbl-models">${tableHead}<tbody>${[...ranked, ...tracked.filter(m => !rankOf.has(m)).sort(byVendor)].map(modelRow).join('')}</tbody></table>
 ${aliases.length ? `<h2>Aliases</h2><table class="tbl-models">${tableHead}<tbody>${aliases.map(modelRow).join('')}</tbody></table>` : ''}
-<h2>Not tracked</h2><ul>${Object.entries(excluded).map(([m, why]) => `<li><code>${esc(m)}</code>: ${esc(why)}</li>`).join('')}</ul>` }));
+${families.length ? `<h2 id="versions">Versions</h2><p class="sub-list">Families with a "-latest" alias. Share of questions where two versions answer differently, today.</p>
+${families.map((fam: any) => `<h3>${esc(vendorName(fam.members[0]))} ${esc(nameOf(fam.base).replace(/^[a-z]+$/, (w: string) => w[0].toUpperCase() + w.slice(1)))}</h3><p class="note"><code>${esc(fam.alias)}</code> serves ${esc(fam.current ? nameOf(fam.current) : '?')}.</p>
+<table class="narrow"><thead><tr><th class="l">Versions</th><th>Differ</th><th class="opt">95% CI</th><th>Score</th><th>Yes/no</th><th>Pick one</th></tr></thead><tbody>${fam.pairs.map((p: any) => `<tr><td class="l"><a href="/models/${slug(p.a)}/">${esc(nameOf(p.a))}</a> → <a href="/models/${slug(p.b)}/">${esc(nameOf(p.b))}</a></td><td><b>${pct(p.overall.flip_rate)}</b></td><td class="opt">${ci(p.overall.ci)}</td><td>${pct(p.by_type.score.flip_rate)}</td><td>${pct(p.by_type.noul.flip_rate)}</td><td>${pct(p.by_type.choice.flip_rate)}</td></tr>`).join('')}</tbody></table>`).join('')}` : ''}
+<h2>Not tracked</h2><p class="sub-list">${Object.entries(excluded).map(([m, why]) => `<code>${esc(m)}</code>: ${esc(why)}`).join(' ')}</p>` }));
 
 // per-model pages
 const dayList = (() => {
@@ -550,11 +548,10 @@ for (const m of models) {
     const dr = prevDrift(p); const rh = hotVs(dr, p);
     return `<tr><td>${shortDate(date)}</td>${snaps.length > 1 ? `<td class="l opt">${esc(p.served.join(', '))}</td>` : ''}<td class="${rh ? 'hot' : ''}">${dr?.n ? pct(dr.flip_rate) : 'first run'}</td><td class="opt">${dr?.n ? ci(dr.ci) : ''}</td><td class="opt">${dr?.direction && dr.flips ? `${dr.direction.fixed} / ${dr.direction.broke}` : ''}</td><td>${pct(p.noise.flip_rate)}</td><td class="opt">${pct(p.shuffle.flip_rate)}</td><td class="opt">${pct(p.paraphrase.flip_rate)}</td><td>${pct(p.accuracy)}</td><td class="opt">${ms(p.latency_p50)}</td></tr>`;
   }).join('');
-  const types = last.drift_by_type ? Object.entries<any>(last.drift_by_type).filter(([, v]) => v.n) : [];
   write(`models/${slug(m)}/index.html`, page({ path: `/models/${slug(m)}/`, title: m, description: `Daily drift, noise and robustness for ${m}.`, body: `
 <p class="crumb"><a href="/models/">Models</a> / ${esc(isAlias(m) ? 'Aliases' : vendorName(m))}</p>
 <h1>${esc(isAlias(m) ? m : nameOf(m))}</h1>
-<p class="meta">${isAlias(m) ? `Alias. Serves ${esc(last.served.join(', '))}.` : `Snapshot ${esc(last.served.join(', '))}. ${servedLine(m, last)}`}</p>
+<p class="meta">${isAlias(m) ? `Alias. Serves ${esc(last.served.join(', '))}.` : `Snapshot ${esc(last.served.join(', '))}. ${servedLine(m, last)}`}${familyOf(m) ? ` <a href="/models/#versions">Compare versions</a>.` : ''}</p>
 <div class="stats"><div><b>${rankOf.has(m) ? `#${rankOf.get(m)} of ${ranked.length}` : '—'}</b><span>${rankOf.has(m) ? `stability, index ${last.stability.index.toFixed(0)}${provisional || runsOf(m) < MIN_RUNS ? ', provisional' : ''}` : 'not ranked yet'}</span></div><div><b class="${hot ? 'hot' : ''}">${d?.n ? pct(d.flip_rate) : '—'}</b><span>recent change${hot ? ', change detected' : ''}</span></div><div><b>${pct(last.noise.flip_rate)}</b><span>noise</span></div><div><b>${pct(last.accuracy)}</b><span>gold accuracy</span></div></div>
 <h2>Daily runs</h2>
 <div class="days" role="img" aria-label="One square per day, each compared with the previous run">${squares}</div>
@@ -562,61 +559,48 @@ for (const m of models) {
 <div class="legend"><span><i class="d-base"></i>First run</span><span><i class="d-ok"></i>No change detected</span><span><i class="d-hot"></i>Change detected</span><span><i class="d-miss"></i>No run</span></div>
 ${last.drift_recent?.n ? (() => { const r = last.drift_recent; const top = last.noise.ci[1];
   return `<h2 id="recent">Recent change</h2>
-<p>${hot ? `<strong class="hot">Change detected.</strong> Today's answers differ ${pct(r.rate)} from recent runs (95% interval ${ci(r.ci)}), entirely above the noise interval, which tops out at ${pct(top)}.` : `No change detected. Today's answers differ ${pct(r.rate)} from recent runs (95% interval ${ci(r.ci)}), which overlaps the noise interval (up to ${pct(top)}).`} Each run counts by how recent it is (half-life 7 days); the daily squares above compare only with the previous run, so a model that drifts a little every day can be flagged here while each square stays grey.</p>
+<p>${hot ? `<strong class="hot">Change detected:</strong> ${pct(r.rate)} (${ci(r.ci)}), above noise (up to ${pct(top)}).` : `No change detected: ${pct(r.rate)} (${ci(r.ci)}), within noise (up to ${pct(top)}).`} Against the last 30 days, weighted by recency; the squares compare only with the previous day.</p>
 <table class="narrow"><thead><tr><th class="l">Compared with</th><th>Weight</th><th>Changed</th><th class="opt">95% CI</th></tr></thead><tbody>${r.by_run.map((b: any) => `<tr><td class="l">${shortDate(b.date)}</td><td>${Math.round(b.weight * 100)}%</td><td>${pct(b.flip_rate)}</td><td class="opt">${ci(b.ci)}</td></tr>`).join('')}</tbody></table>`; })() : ''}
 <h2>Run history</h2>
 <table><thead><tr><th>Run</th>${snaps.length > 1 ? '<th class="l opt">Snapshot</th>' : ''}<th>Changed<span class="long"> vs previous</span></th><th class="opt">95% CI</th><th class="opt">Became right / wrong</th><th>Noise</th><th class="opt">Shuffle</th><th class="opt">Paraphrase</th><th>Gold acc.</th><th class="opt">p50</th></tr></thead><tbody>${rows}</tbody></table>
-<p class="note">Became right / wrong counts changed answers on questions with a reference label. Changes on questions without one, usually the ambiguous ones, aren't in either count.</p>
-${rankOf.has(m) ? `<h2>Instability index</h2><table class="narrow"><thead><tr><th>Source</th><th>Answers changed</th><th class="opt">Reference</th><th>Weight</th><th>Points</th></tr></thead><tbody>${COMP.map(([k, label]) => `<tr><td><i class="sw-inline s-${k}"></i>${label}</td><td>${pct(last.stability.components[k])}</td><td class="opt">${pct(last.stability.scales[k], 2)}</td><td>${Math.round(last.stability.weights[k] * 100)}%</td><td>${last.stability.parts[k].toFixed(1)}</td></tr>`).join('')}<tr><td><b>Index</b></td><td></td><td class="opt"></td><td></td><td><b>${last.stability.index.toFixed(1)}</b><small>${last.stability.ci[0].toFixed(0)}–${last.stability.ci[1].toFixed(0)}</small></td></tr></tbody></table><p class="note">Over time counts only change beyond this model's noise.</p>` : ''}
-${types.length ? `<h2>Changed since Oct 20, by question type</h2><table class="narrow"><thead><tr><th>Type</th><th>Questions</th><th>Changed</th><th class="opt">95% CI</th></tr></thead><tbody>${types.map(([t, v]) => `<tr><td>${TYPE_NAME[t]}</td><td>${v.n}</td><td>${pct(v.flip_rate)}</td><td class="opt">${ci(v.ci)}</td></tr>`).join('')}</tbody></table>` : ''}
+<p class="note">Right / wrong: labeled questions only.</p>
+${rankOf.has(m) ? `<h2>Instability index</h2><table class="narrow"><thead><tr><th>Source</th><th>Answers changed</th><th class="opt">Reference</th><th>Weight</th><th>Points</th></tr></thead><tbody>${COMP.map(([k, label]) => `<tr><td><i class="sw-inline s-${k}"></i>${label}</td><td>${pct(last.stability.components[k])}</td><td class="opt">${pct(last.stability.scales[k], 2)}</td><td>${Math.round(last.stability.weights[k] * 100)}%</td><td>${last.stability.parts[k].toFixed(1)}</td></tr>`).join('')}<tr><td><b>Index</b></td><td></td><td class="opt"></td><td></td><td><b>${last.stability.index.toFixed(1)}</b><small>${last.stability.ci[0].toFixed(0)}–${last.stability.ci[1].toFixed(0)}</small></td></tr></tbody></table>` : ''}
 ${last.providers.length > 1 && last.noise_cross_provider?.n ? `<h2>Providers</h2><p>Served by ${esc(last.providers.join(', '))}. Repeat requests that went to a different provider changed ${pct(last.noise_cross_provider.flip_rate)} of answers (${last.noise_cross_provider.n} questions); same provider: ${pct(last.noise_same_provider.flip_rate)} (${last.noise_same_provider.n}).</p>` : ''}
 ${last.errors ? `<h2>Errors, latest run</h2><p class="note">${last.errors} of ${last.requests} requests.</p><ul>${last.error_samples.map((s: string) => `<li><code>${esc(s)}</code></li>`).join('')}</ul>` : ''}
 ` }));
 }
 
-// Jev finding
-if (jev) {
-  const rows = (o: Record<string, any>, label: (k: string) => string) => Object.entries(o).sort((a, b) => b[1].flip_rate - a[1].flip_rate).map(([k, v]) => `<tr><td>${esc(label(k))}</td><td>${v.n}</td><td>${pct(v.flip_rate)}</td><td class="opt">${ci(v.ci)}</td></tr>`).join('');
-  const head = '<thead><tr><th>Slice</th><th>Questions</th><th>Different answer</th><th class="opt">95% CI</th></tr></thead>';
-  write('findings/jev-1-13-vs-1-14/index.html', page({ path: '/findings/jev-1-13-vs-1-14/', title: 'Jev 1.14 vs 1.13', description: 'How often TypeSafe Jev 1.14 gives a different answer than Jev 1.13 on the same questions.', body: `
-<h1>Jev 1.14 vs 1.13</h1><p class="dek">Both versions, the same ${jev.overall.n.toLocaleString()} questions, every run. Latest: ${shortDate(latest.date)}.</p>
-<div class="stats"><div><b>${pct(jev.overall.flip_rate)}</b><span>different top answer</span></div><div><b>${ci(jev.overall.ci)}</b><span>95% interval</span></div><div><b>${pct(latest.perModel['typesafe/jev-1.13']?.accuracy)} / ${pct(latest.perModel['typesafe/jev-1.14']?.accuracy)}</b><span>gold accuracy, 1.13 / 1.14</span></div><div><b>${pct(latest.perModel['typesafe/jev-1.13']?.noise.flip_rate)} / ${pct(latest.perModel['typesafe/jev-1.14']?.noise.flip_rate)}</b><span>noise, 1.13 / 1.14</span></div></div>
-<h2>By question type</h2><table class="narrow">${head}<tbody>${rows(jev.by_type, k => TYPE_NAME[k])}</tbody></table>
-<h2>By task family</h2><table>${head}<tbody>${rows(jev.by_family, k => k)}</tbody></table>
-<p class="note">Families with few questions have wide intervals.</p>` }));
-}
-
-// posts
-write('posts/index.html', page({ path: '/posts/', title: 'Findings', description: 'Write-ups from the Decision Drift tracker.', body: `<h1>Findings</h1><ul class="posts">${posts.map(p => `<li><a href="/posts/${p.slug}/">${esc(p.title)}</a><div class="when">${dateLong(p.date)}</div><div>${esc(p.summary)}</div></li>`).join('')}${jev ? `<li><a href="/findings/jev-1-13-vs-1-14/">Jev 1.14 vs 1.13</a><div class="when">Updated daily</div><div>The two versions give a different top answer on ${pct(jev.overall.flip_rate)} of questions. <code>~typesafe/jev-latest</code> serves 1.14.</div></li>` : ''}</ul>` }));
-for (const p of posts) write(`posts/${p.slug}/index.html`, page({ path: `/posts/${p.slug}/`, title: p.title, description: p.summary, body: `<article><p class="crumb"><a href="/posts/">Findings</a> / ${dateLong(p.date)}</p><h1>${esc(p.title)}</h1>${p.html.replace(/<div class="table-wrap">/g, '<div class="tw">')}</article>` }));
+// moved pages
+redirect('findings/jev-1-13-vs-1-14/index.html', '/models/#versions');
+if (posts.length) {
+  write('posts/index.html', page({ path: '/posts/', title: 'Findings', description: 'Write-ups from the Decision Drift tracker.', body: `<h1>Findings</h1><ul class="posts">${posts.map(p => `<li><a href="/posts/${p.slug}/">${esc(p.title)}</a><div class="when">${dateLong(p.date)}</div></li>`).join('')}</ul>` }));
+  for (const p of posts) write(`posts/${p.slug}/index.html`, page({ path: `/posts/${p.slug}/`, title: p.title, description: p.summary, body: `<article><h1>${esc(p.title)}</h1>${p.html.replace(/<div class="table-wrap">/g, '<div class="tw">')}</article>` }));
+} else redirect('posts/index.html', '/');
+redirect('posts/microsoft-decision-1-same-snapshot/index.html', '/models/microsoft--microsoft-decision-1/');
 
 // method
 const cov = manifest.coverage;
 const covList = (o: Record<string, number>) => Object.entries(o).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${esc(k)} ${v}`).join(', ');
-write('method/index.html', page({ path: '/method/', title: 'Method', description: 'How Decision Drift measures drift, noise, robustness and calibration.', body: `<article>
+write('method/index.html', page({ path: '/method/', title: 'Method', description: 'How Decision Drift measures answer changes in decision models.', body: `<article>
 <h1>Method</h1>
-<p class="dek">Decision models answer typed questions (yes/no, pick one, score on a scale) with probabilities instead of text. This tracks whether those answers change.</p>
-<p>Not a capability leaderboard. For which model is most capable, see Artificial Analysis's <a href="https://artificialanalysis.ai/articles/artificial-analysis-decision-index">Decision Index</a>. This tracks whether answers stay put.</p>
+<p class="dek">Decision models answer typed questions with probabilities. This tracks whether the answers change.</p>
+<p>Not a capability ranking; for that, see Artificial Analysis's <a href="https://artificialanalysis.ai/articles/artificial-analysis-decision-index">Decision Index</a>.</p>
 <h2>Suite</h2>
-<p>Version 1: ${manifest.splits.public.states + manifest.splits.private.states} inputs, ${manifest.splits.public.questions + manifest.splits.private.questions} questions. Task families: ${covList(cov.family)}. Languages: ${covList(cov.language)}. Every model gets the identical request, and questions are never tuned against results.</p>
-<p>Requests are immutable. A flawed item is retired and replaced; headline numbers use the original cohort. Reference labels can be corrected after human review; corrections are logged in the manifest and never change what is sent.</p>
-<p>70% of the suite is public. 30% is private so no vendor can train on all of it; only its hash and aggregate scores are published. Public hash <code>${manifest.splits.public.sha256.slice(0, 16)}</code>, private hash <code>${manifest.splits.private.sha256.slice(0, 16)}</code>.</p>
+<p>${manifest.splits.public.states + manifest.splits.private.states} inputs and ${(manifest.splits.public.questions + manifest.splits.private.questions).toLocaleString()} questions, sent unchanged to every model daily at 10:17 UTC and never tuned against results. 70% is public; 30% stays private so no vendor can train on all of it. Hashes: public <code>${manifest.splits.public.sha256.slice(0, 16)}</code>, private <code>${manifest.splits.private.sha256.slice(0, 16)}</code>.</p>
 <h2>Measures</h2>
 <ul>
-<li><strong>Recent change:</strong> today's top answers compared with each of the last 30 days, on byte-identical requests. Each day's comparison is weighted by exponential decay (half-life 7 days), shifted to reach zero at 30 days, so a change counts most the day after it happens and stops counting after 30 stable days. A day without a run uses the closest run; days before a model was first tracked are left out.</li>
-<li><strong>Daily squares and run history:</strong> each run against the previous run. Changed answers on questions with a reference label are split into those that became right and those that became wrong. The index ignores direction: a fix still moves the probabilities someone set a threshold on.</li>
-<li><strong>Change log:</strong> a change is listed on the run where it first differs from the previous run beyond noise, once the next run confirms it. New snapshot IDs and newly tracked models are listed the day they appear, as are catalog events: a model listed on OpenRouter that no provider serves, a run where a tracked model gave no answers, and a model no longer listed. The catalog is checked once a day, at the run, so listings that come and go in between aren't seen. Models that have never answered get no page or rank.</li>
-<li><strong>Noise:</strong> share that differs when 100 inputs are sent again minutes later, pooled over the last 7 days. A change is detected only when its 95% interval sits above the noise interval. A noisier model needs a bigger change to be detected; that cost shows up in its index through the repeat component.</li>
-<li><strong>Option shuffle, paraphrase:</strong> share that changes when choice options are reordered, or instructions reworded with the same meaning.</li>
-<li><strong>Gold accuracy:</strong> on questions where the reference label and two LLM labelers (GPT-6.1 Sol, Gemini 4 Argon) agree. A person reviewed a 50-item sample before launch and corrected 23 labels. These are the clearer cases, so this is a regression check, not a ranking.</li>
-<li><strong>Latency, errors, cost:</strong> as measured by the runner, network included.</li>
+<li><strong>Recent change:</strong> today's top answers against each run in the last 30 days, weighted by recency (half-life 7 days, zero at 30).</li>
+<li><strong>Noise:</strong> answers that change when 100 inputs are re-sent minutes later, pooled over 7 days.</li>
+<li><strong>Change detected:</strong> the change's 95% interval sits entirely above the noise interval.</li>
+<li><strong>Option order, rewording:</strong> answers that change when options are shuffled or instructions reworded.</li>
+<li><strong>Accuracy:</strong> on clear-cut questions with an agreed answer. A sanity check, not a ranking.</li>
 </ul>
 <h2 id="stability">Instability index</h2>
-<p>Lower is better; 100 is an average model. Four change rates feed it: recent change beyond the model's noise (45%), change on repeat (30%), change when options are reordered (10%), and change when instructions are reworded (15%). The rates sit on very different scales (rewording typically moves 8.6% of answers, recent change beyond noise under 1%), so each is first divided by a fixed reference rate: the average across models on Oct 28, 2026 (0.36%, 1.75%, 2.6%, 8.6%). Without that step, rewording would decide most of the ranking whatever the weights. The references stay fixed, so a model's index moves only when its own behavior does. Over time weighs most: users can't prevent it and won't notice it without monitoring. On repeat is next; users can't fix it either, but it shows up when they first test a model. Option order weighs least because it mostly tracks the same near-tie questions as on repeat, and fixed option lists avoid it. Rewording matters whenever a prompt is edited or moved to another model. The ranking barely depends on the exact split; readers can set their own weights on the ranking. The 95% interval comes from resampling questions 1,000 times. Lines on the ranking separate groups whose intervals don't overlap the group leader's. Rankings are provisional until a model has ${MIN_RUNS} daily runs. Aliases and models with a single run aren't ranked.</p>
+<p>Lower is better; 100 is an average model. Weights: ${COMP.map(([k, l]) => `${l.toLowerCase()} ${Math.round(stOf(ranked[0]).weights[k] * 100)}%`).join(', ')}. Each rate is first divided by a fixed reference (${COMP.map(([k]) => pct(stOf(ranked[0]).scales[k], 2)).join(', ')}, the Oct 28 averages) so no component dominates. Set your own weights on the ranking. Dashed lines separate groups whose intervals don't overlap.</p>
 <h2>Providers</h2>
-<p>OpenRouter can route one model to several hosts, and hosts can answer differently. When a model's maker serves it alongside other hosts, requests are pinned to the maker with no fallback, so a change is the maker's and an outage counts as errors. Pinned: ${Object.entries(pinsSite).map(([m, v]) => `${esc(nameOf(m))} to ${esc(v.name)} (from ${shortDate(v.since)})`).join(', ')}. Models the maker doesn't serve on OpenRouter are labeled third-party hosted.</p>
-<h2>Schedule and limits</h2>
-<p>Daily at 10:17 UTC through OpenRouter's decisions API, which is in alpha. Every response is stored raw. Rates carry 95% Wilson intervals; recent change uses a normal approximation over questions, and the index a bootstrap. Models that can't answer Choice and Score questions are listed as not tracked.</p>
+<p>When a model's maker also serves it on OpenRouter, requests go only to the maker: ${Object.entries(pinsSite).map(([m, v]) => `${esc(nameOf(m))} to ${esc(v.name)}`).join(', ')}. Models the maker doesn't serve are labeled third-party hosted.</p>
+<h2>Limits</h2>
+<p>OpenRouter's decisions API is in alpha. Mostly English. Missing days aren't backfilled.</p>
 </article>` }));
 
 // data + status
@@ -625,7 +609,7 @@ fs.writeFileSync(path.join(OUT, 'data/latest.json'), JSON.stringify(latest));
 fs.writeFileSync(path.join(OUT, 'data/history.json'), JSON.stringify(Object.fromEntries(models.map(m => [m, history(m).map(({ date, p }) => ({ date, served: p.served, providers: p.providers, changed_since_baseline: date === BASELINE.date ? null : p.drift_vs_compare, recent_change: p.drift_recent ?? null, changed_vs_previous: p.drift_vs_previous ?? null, changed_by_type: date === BASELINE.date ? null : p.drift_by_type ?? null, noise: p.noise, shuffle: p.shuffle, paraphrase: p.paraphrase, accuracy: p.accuracy, accuracy_ci: p.accuracy_ci, latency_p50: p.latency_p50, latency_p95: p.latency_p95, error_rate: p.error_rate }))]))));
 fs.copyFileSync(path.join(ROOT, 'suite/manifest-v1.json'), path.join(OUT, 'data/manifest-v1.json'));
 fs.copyFileSync(path.join(ROOT, 'suite/core-v1.public.jsonl'), path.join(OUT, 'data/core-v1.public.jsonl'));
-write('data/index.html', page({ path: '/data/', title: 'Data', description: 'Download Decision Drift results, the public suite and the manifest.', body: `<h1>Data</h1><p class="dek">Regenerated after each daily run. CC BY 4.0: credit "Decision Drift (decisiondrift.dev)" with a link. CLINC150-derived items stay CC BY 3.0.</p>
+write('data/index.html', page({ path: '/data/', title: 'Data', description: 'Download Decision Drift results, the public suite and the manifest.', body: `<h1>Data</h1><p class="dek">Updated daily. CC BY 4.0, credit "Decision Drift" with a link; CLINC150-derived items CC BY 3.0.</p>
 <table><thead><tr><th>File</th><th class="l">Contents</th></tr></thead><tbody>
 <tr><td><a href="/data/latest.json">latest.json</a></td><td class="l">Every metric, every model, latest run</td></tr>
 <tr><td><a href="/data/history.json">history.json</a></td><td class="l">Per-model metrics for every run since Oct 20, 2026</td></tr>
@@ -646,7 +630,7 @@ const feedItems = [
   ...changeLog.map(e => ({ title: `${isAlias(e.m) ? e.m : nameOf(e.m)}: ${e.kind === 'listing' || e.kind === 'outage' ? e.text.split(':')[0].replace(/\.$/, '').replace(/^./, c => c.toLowerCase()) : ({ change: 'change detected', serve: 'new snapshot', new: 'now tracked' } as Record<string, string>)[e.kind]}`, link: models.includes(e.m) ? `${SITE}/models/${slug(e.m)}/` : `${SITE}/changes/#log`, date: e.date, desc: e.text })),
 ].sort((a, b) => b.date.localeCompare(a.date));
 fs.writeFileSync(path.join(OUT, 'feed.xml'), `<?xml version="1.0" encoding="UTF-8"?><rss version="2.0"><channel><title>Decision Drift</title><link>${SITE}/</link><description>Daily measurements of whether decision models change their answers.</description>${feedItems.map(i => `<item><title>${esc(i.title)}</title><link>${i.link}</link><guid isPermaLink="false">${esc(i.link + '#' + i.date + '-' + i.title)}</guid><pubDate>${new Date(i.date + 'T12:00:00Z').toUTCString()}</pubDate><description>${esc(i.desc)}</description></item>`).join('')}</channel></rss>`);
-const pages = ['/', '/changes/', '/models/', '/posts/', '/method/', '/data/', '/status/', ...models.map(m => `/models/${slug(m)}/`), ...(jev ? ['/findings/jev-1-13-vs-1-14/'] : []), ...posts.map(p => `/posts/${p.slug}/`)];
+const pages = ['/', '/changes/', '/models/', '/method/', '/data/', '/status/', ...models.map(m => `/models/${slug(m)}/`), ...(posts.length ? ['/posts/', ...posts.map(p => `/posts/${p.slug}/`)] : [])];
 fs.writeFileSync(path.join(OUT, 'sitemap.xml'), `<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${pages.map(p => `<url><loc>${SITE}${p}</loc></url>`).join('')}</urlset>`);
 fs.writeFileSync(path.join(OUT, 'robots.txt'), `User-agent: *\nAllow: /\nSitemap: ${SITE}/sitemap.xml\n`);
 fs.writeFileSync(path.join(OUT, 'llms.txt'), `# Decision Drift
@@ -655,13 +639,14 @@ fs.writeFileSync(path.join(OUT, 'llms.txt'), `# Decision Drift
 
 Latest run: ${latest.date}, ${latest.models} models, ${latest.items} states.
 Most stable${provisional ? ' (provisional)' : ''}, instability index (100 = average model, lower is better): ${ranked.slice(0, 5).map(m => `${nameOf(m)} ${stOf(m).index.toFixed(0)}`).join(', ')}. Least stable: ${ranked.slice(-2).map(m => `${nameOf(m)} ${stOf(m).index.toFixed(0)}`).join(', ')}.
-${jev ? `Jev 1.13 vs 1.14: ${pct(jev.overall.flip_rate)} of top answers differ (95% CI ${ci(jev.overall.ci)}).` : ''}
+${families.map((fam: any) => fam.pairs.map((p: any) => `${nameOf(p.a)} vs ${nameOf(p.b)}: ${pct(p.overall.flip_rate)} of top answers differ.`).join(' ')).join(' ')}
 
 ## Pages
 - [Ranking](${SITE}/): most stable decision models, by instability index
 - [Changes](${SITE}/changes/): recent answer changes per model (last 30 days, decay-weighted), against each model's noise, plus a change log
 - [Models](${SITE}/models/): latest metrics table
-${jev ? `- [Jev 1.13 vs 1.14](${SITE}/findings/jev-1-13-vs-1-14/): version comparison by question type and task family\n` : ''}- [Method](${SITE}/method/): suite design, metrics, limits
+- [Versions](${SITE}/models/#versions): how much versions of the same model differ
+- [Method](${SITE}/method/): suite design, metrics, limits
 ${posts.map(p => `- [${p.title}](${SITE}/posts/${p.slug}/): ${p.summary}`).join('\n')}
 
 ## Data

@@ -183,6 +183,20 @@ function pair(a: string, b: string) {
 }
 const jev = pair('typesafe/jev-1.13', 'typesafe/jev-1.14');
 
+// Version families, defined by OpenRouter's "~vendor/name-latest" aliases: the alias says which model replaces which.
+// Members are vendor/name plus vendor/name followed by a version number (jev-1.13, d1.1, decider-v1.2); tiers such as
+// d1-ultra have their own alias and family. Every pair of versions is compared on today's answers.
+const verKey = (rest: string) => (rest.match(/\d+/g) ?? []).map(Number);
+const families = models.filter(m => m.startsWith('~') && m.endsWith('-latest')).map(alias => {
+  const base = alias.slice(1, -'-latest'.length);
+  const members = models.filter(m => !m.startsWith('~') && (m === base || (m.startsWith(base) && /^[-.]v?\d+(\.\d+)*$/.test(m.slice(base.length)))))
+    .sort((a, b) => { const x = verKey(a.slice(base.length)), y = verKey(b.slice(base.length)); for (let i = 0; i < Math.max(x.length, y.length); i++) { const d = (x[i] ?? -1) - (y[i] ?? -1); if (d) return d; } return 0; });
+  const served = perModel[alias]?.served?.[0] ?? '';
+  const current = members.filter(m => served.startsWith(m)).sort((a, b) => b.length - a.length)[0] ?? null;
+  const pairs = members.flatMap((a, i) => members.slice(i + 1).map(b => { const p = pair(a, b); return p && { a, b, overall: p.overall, by_type: p.by_type }; })).filter(Boolean);
+  return { alias, base, members, current, pairs };
+}).filter(f => f.members.length > 1);
+
 // Cross-model disagreement on each question (majority share)
 const allBase = models.map(m => index(main.get(m), 'base'));
 const keys = new Set(allBase.flatMap(a => [...a.keys()]));
@@ -195,7 +209,7 @@ for (const k of keys) {
 }
 const meanMajority = mean(disagreement.map(d => d.majority_share));
 
-const summary = { date, run, dup: args.dup ?? null, compare: args['compare-run'] ?? null, items: items.length, models: models.length, perModel, jev_113_vs_114: jev, cross_model_mean_majority_share: meanMajority };
+const summary = { date, run, dup: args.dup ?? null, compare: args['compare-run'] ?? null, items: items.length, models: models.length, perModel, jev_113_vs_114: jev, families, cross_model_mean_majority_share: meanMajority };
 fs.mkdirSync(path.join(ROOT, 'reports'), { recursive: true });
 fs.writeFileSync(path.join(ROOT, 'reports', `${date}-${run}.json`), JSON.stringify(summary, null, 1));
 
