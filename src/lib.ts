@@ -68,16 +68,16 @@ export async function fetchCatalog(): Promise<CatalogModel[]> {
     .map((m: any) => ({ id: m.id, canonical_slug: m.canonical_slug, prompt_price: Number(m.pricing?.prompt ?? 0), context_length: m.context_length }));
 }
 
-// Budget guard: OpenRouter reports cumulative spend on the key itself.
-export async function keyUsage(): Promise<{ usage: number; limit: number | null }> {
+// Budget guard: OpenRouter reports the key's spend, all time (`usage`) and for the current UTC day (`usage_daily`).
+export async function keyUsage(): Promise<{ usage: number; daily: number; limit: number | null }> {
   try {
     const r = await fetch(KEY_URL, { headers: authHeaders() });
     const d = (await r.json()) as any;
     const x = d.data ?? d;
-    return { usage: Number(x.usage), limit: x.limit ?? null };
-  } catch { return { usage: NaN, limit: null }; }
+    return { usage: Number(x.usage), daily: Number(x.usage_daily), limit: x.limit ?? null };
+  } catch { return { usage: NaN, daily: NaN, limit: null }; }
 }
-export const BUDGET_STOP = Number(process.env.BUDGET_STOP ?? 22); // dollars of total key usage
+export const BUDGET_STOP = Number(process.env.BUDGET_STOP ?? 5); // dollars of key spend in the current UTC day (resets 00:00 UTC)
 
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 

@@ -7,7 +7,7 @@ export default defineRailway(() => {
     source: github("bomliu/decision-drift", { branch: "main" }),
     build: { builder: "DOCKERFILE", dockerfilePath: "deploy/collector.Dockerfile", watchPatterns: ["deploy/collector.Dockerfile", "scripts/collect.sh"] },
     deploy: { cronSchedule: "17 10 * * *", restartPolicyType: "NEVER" },
-    env: { OPENROUTER_API_KEY: preserve(), GITHUB_TOKEN: preserve(), BUDGET_STOP: "22" },
+    env: { OPENROUTER_API_KEY: preserve(), GITHUB_TOKEN: preserve(), BUDGET_STOP: "5" },
     volumeMounts: { "/data": volume("collector-data", { sizeMB: 2048, region: "us-west2" }) },
   });
 

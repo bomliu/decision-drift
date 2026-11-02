@@ -36,14 +36,16 @@ function parse(text: string): Record<string, unknown> | null {
 }
 
 const start = await keyUsage();
+if (!Number.isFinite(start.daily)) { console.error('Cannot read key spend from OpenRouter; refusing to run without the budget check.'); process.exit(2); }
 let spent = 0, n = 0, bad = 0;
 const todo = items.filter(i => !done.has(i.id));
-console.log(`labeler=${model} todo=${todo.length} key_usage=$${start.usage.toFixed(4)}`);
+console.log(`labeler=${model} todo=${todo.length} key_usage_today=$${start.daily.toFixed(4)} stop_at=$${BUDGET_STOP}/day`);
 const out = fs.createWriteStream(outFile, { flags: 'a' });
 await pool(todo, conc, async (item) => {
   if (spent >= spendCap) return;
   const u0 = await keyUsage().catch(() => null);
-  if (u0 && u0.usage >= BUDGET_STOP) { spent = Infinity; console.error('BUDGET STOP'); return; }
+  const today = u0 && Number.isFinite(u0.daily) ? u0.daily : start.daily + spent;
+  if (today >= BUDGET_STOP) { spent = Infinity; console.error('BUDGET STOP'); return; }
   try {
     const r = await chat(model, [{ role: 'user', content: render(item) }], { reasoning: { effort: 'low' }, temperature: 0 });
     const text = r.choices?.[0]?.message?.content ?? '';

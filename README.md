@@ -28,7 +28,7 @@ node src/run.ts --items suite/core-v1.public.jsonl,private/core-v1.private.jsonl
 node src/run.ts --items <noise subset> --run day1-dup
 node src/report.ts --date YYYY-MM-DD --run day1 --dup day1-dup
 ```
-The runner stops when the key's total spend reaches `BUDGET_STOP` (default $22).
+The runner stops when the key's spend for the current UTC day reaches `BUDGET_STOP` (default $5; OpenRouter's daily window resets at 00:00 UTC).
 
 ## Method notes
 - Questions follow the published System One conventions (instructions, criteria, an explicit `none` option). They are identical for every model and are **never tuned against results**.

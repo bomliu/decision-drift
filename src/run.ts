@@ -54,8 +54,9 @@ const pinOf = (m: string) => (pins[m]?.provider && pins[m].since <= date ? pins[
 const models = args.models && args.models !== 'all' ? args.models.split(',') : catalog.map(m => m.id).filter(id => !(id in excluded));
 
 const start = await keyUsage();
-console.log(`run=${runName} date=${date} items=${items.length} jobs/model=${jobs.length} models=${models.length} key_usage=$${start.usage.toFixed(4)} stop_at=$${BUDGET_STOP}`);
-if (start.usage >= BUDGET_STOP) { console.error('Budget stop reached before start.'); process.exit(2); }
+console.log(`run=${runName} date=${date} items=${items.length} jobs/model=${jobs.length} models=${models.length} key_usage_today=$${start.daily.toFixed(4)} stop_at=$${BUDGET_STOP}/day`);
+if (!Number.isFinite(start.daily)) { console.error('Cannot read key spend from OpenRouter; refusing to run without the budget check.'); process.exit(2); }
+if (start.daily >= BUDGET_STOP) { console.error('Budget stop reached before start.'); process.exit(2); }
 
 let done = 0, failed = 0, spent = 0, stopped = false;
 const t0 = Date.now();
@@ -88,9 +89,9 @@ await pool(models, parallelModels, async (model) => {
     if (res.ok) consecutiveFail = 0; else { failed++; consecutiveFail++; }
     if (done % 500 === 0) {
       const u = await keyUsage();
-      console.log(`  ${done} calls, ${failed} failed, ~$${spent.toFixed(4)} this run, key usage $${u.usage.toFixed(4)}, ${Math.round((Date.now() - t0) / 1000)}s`);
+      console.log(`  ${done} calls, ${failed} failed, ~$${spent.toFixed(4)} this run, key usage today $${u.daily.toFixed(4)}, ${Math.round((Date.now() - t0) / 1000)}s`);
       // fall back to locally tracked spend when the key endpoint is unavailable
-      const est = Number.isFinite(u.usage) ? u.usage : start.usage + spent;
+      const est = Number.isFinite(u.daily) ? u.daily : start.daily + spent;
       if (est >= BUDGET_STOP) { stopped = true; console.error('BUDGET STOP'); }
     }
   });
@@ -99,4 +100,4 @@ await pool(models, parallelModels, async (model) => {
 });
 
 const end = await keyUsage();
-console.log(`finished: ${done} calls, ${failed} failed, run cost ~$${spent.toFixed(4)}, key usage $${end.usage.toFixed(4)}, ${Math.round((Date.now() - t0) / 1000)}s${stopped ? ' (BUDGET STOP)' : ''}`);
+console.log(`finished: ${done} calls, ${failed} failed, run cost ~$${spent.toFixed(4)}, key usage today $${end.daily.toFixed(4)}, ${Math.round((Date.now() - t0) / 1000)}s${stopped ? ' (BUDGET STOP)' : ''}`);
