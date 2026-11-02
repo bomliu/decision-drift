@@ -38,11 +38,14 @@ const history = (m: string) => reports.map(r => ({ date: r.date, p: r.perModel[m
 const drift = (m: string, r: Report) => { const x = r.perModel[m]?.drift_recent; return x?.n ? { n: x.n, flip_rate: x.rate, ci: x.ci } : null; };
 const prevDrift = (p: any) => p?.drift_vs_previous?.n ? p.drift_vs_previous : null;
 const hotVs = (d: any, p: any) => !!(d?.n && p?.noise?.ci && d.ci[0] > p.noise.ci[1]);
+// Flag: a change the log has confirmed (the next run still differs) on a run in the last FLAG_DAYS days.
+// Same rule as the change log and the red squares, so the pages agree. Uses changeLog, so call it only after that is built.
+const FLAG_DAYS = 7;
+const lastChange = (m: string) => changeLog.find(e => e.kind === 'change' && e.m === m && dayNum(latest.date) - dayNum(e.date) < FLAG_DAYS);
+const lc = (t: string) => t[0].toLowerCase() + t.slice(1);
 function verdict(m: string) {
-  const p = latest.perModel[m]; const d = drift(m, latest);
-  if (!p || !d || !d.n) return { key: 'none', label: 'No comparison yet' };
-  if (d.ci[0] > (p.noise?.ci?.[1] ?? 0)) return { key: 'changed', label: 'Change detected' };
-  return { key: 'steady', label: 'No change detected' };
+  const c = lastChange(m);
+  return c ? { key: 'changed', label: `Changed ${shortDate(c.date)}`, date: c.date } : { key: 'steady', label: `No confirmed change in ${FLAG_DAYS} days` };
 }
 
 // ---------- formatting ----------
@@ -115,7 +118,7 @@ const utcTime = (iso: string) => new Date(iso).toISOString().slice(11, 16) + ' U
 function notes(m: string): string[] {
   const p = latest.perModel[m]; const b = baselineOf(m); const d = drift(m, latest);
   if (!p || !d || verdict(m).key !== 'changed') return [];
-  const out: string[] = [];
+  const out: string[] = [`${verdict(m).label}.`];
   if (b && b.served.join() === p.served.join()) out.push('Same snapshot ID.');
   else if (b) out.push('New snapshot ID.');
   if (p.noise.flip_rate === 0) out.push('Zero noise.');
@@ -322,28 +325,6 @@ function write(rel: string, content: string) {
 
 // ---------- pages ----------
 fs.rmSync(OUT, { recursive: true, force: true });
-const tracked = models.filter(m => latest.perModel[m] && answeredOn(m, latest) && !isAlias(m));
-const compared = tracked.filter(m => drift(m, latest)?.n);
-const fresh = tracked.filter(m => !drift(m, latest)?.n);
-const aliases = models.filter(m => latest.perModel[m] && answeredOn(m, latest) && isAlias(m));
-const excess = (m: string) => drift(m, latest)!.flip_rate - latest.perModel[m].noise.flip_rate;
-const detected = compared.filter(m => verdict(m).key === 'changed').sort((a, b) => excess(b) - excess(a));
-const undetected = compared.filter(m => verdict(m).key !== 'changed').sort((a, b) => drift(a, latest)!.flip_rate - drift(b, latest)!.flip_rate || a.localeCompare(b));
-const ordered = [...detected, ...undetected];
-// axis fits the changed-answer values; wide noise bands clip at the right edge
-const scaleMax = Math.max(0.04, Math.ceil((Math.max(...ordered.map(m => drift(m, latest)!.ci[1])) + 0.005) / 0.02) * 0.02);
-const xPct = (v: number) => (100 * Math.min(v, scaleMax) / scaleMax).toFixed(2) + '%';
-const ticks = Array.from({ length: Math.round(scaleMax / 0.02) + 1 }, (_, i) => i * 0.02);
-const families: any[] = (latest as any).families ?? [];
-const familyOf = (m: string) => families.find(fam => fam.members.includes(m));
-const famName = (fam: any) => `${vendorName(fam.members[0])} ${nameOf(fam.base).replace(/^[a-z]+$/, (w: string) => w[0].toUpperCase() + w.slice(1))}`;
-const famId = (fam: any) => fam.alias.slice(1, -'-latest'.length).replace(/\//g, '-');
-const TASK: Record<string, string> = { banking77: 'Banking intents', claim: 'Claim checking', clinc: 'Assistant intents', entity: 'Record matching', guardrail: 'Content moderation', logs: 'Log triage', rag: 'Retrieval relevance', review: 'Review sentiment', support: 'Support routing', tool: 'Tool selection', value: 'Field extraction' };
-// The alias's current version against the version before it, e.g. Jev 1.14 vs 1.13
-const upgradeOf = (fam: any) => { const i = fam.members.indexOf(fam.current); if (i < 1) return null; const p = fam.pairs.find((x: any) => x.a === fam.members[i - 1] && x.b === fam.current); return p ? { fam, from: fam.members[i - 1], to: fam.current, p } : null; };
-const upgrades = families.map(upgradeOf).filter(Boolean) as any[];
-const verNote = (m: string) => { const u = upgrades.find(x => x.to === m); return u ? { text: `${pct(u.p.overall.flip_rate)} differ from ${nameOf(u.from)}`, href: `/versions/#${famId(u.fam)}` } : null; };
-
 // ---------- change log: generated from the data, no prose ----------
 // A change is logged on the run where it first shows against the previous run, once the next run confirms it
 // (still different from the run before the change). Snapshot moves and new models are logged the day they happen.
@@ -389,6 +370,28 @@ for (const m of models) {
 changeLog.sort((a, b) => b.date.localeCompare(a.date) || a.kind.localeCompare(b.kind) || a.m.localeCompare(b.m));
 const logHtml = changeLog.length ? `<h2 id="log">Log</h2><p class="sub-list">Changes are listed once the next run confirms them. <a href="/feed.xml">RSS</a></p>
 <ol class="log">${changeLog.map(e => `<li class="log-${e.kind}"><time datetime="${e.date}">${shortDate(e.date)}</time><span>${!e.m ? '' : models.includes(e.m) ? `<a href="/models/${slug(e.m)}/">${esc(isAlias(e.m) ? e.m : nameOf(e.m))}</a> ` : `<b>${esc(e.m)}</b> `}${esc(e.text)}</span></li>`).join('')}</ol>` : '';
+
+const tracked = models.filter(m => latest.perModel[m] && answeredOn(m, latest) && !isAlias(m));
+const compared = tracked.filter(m => drift(m, latest)?.n);
+const fresh = tracked.filter(m => !drift(m, latest)?.n);
+const aliases = models.filter(m => latest.perModel[m] && answeredOn(m, latest) && isAlias(m));
+const excess = (m: string) => drift(m, latest)!.flip_rate - latest.perModel[m].noise.flip_rate;
+const detected = compared.filter(m => verdict(m).key === 'changed').sort((a, b) => lastChange(b)!.date.localeCompare(lastChange(a)!.date) || excess(b) - excess(a));
+const undetected = compared.filter(m => verdict(m).key !== 'changed').sort((a, b) => drift(a, latest)!.flip_rate - drift(b, latest)!.flip_rate || a.localeCompare(b));
+const ordered = [...detected, ...undetected];
+// axis fits the changed-answer values; wide noise bands clip at the right edge
+const scaleMax = Math.max(0.04, Math.ceil((Math.max(...ordered.map(m => drift(m, latest)!.ci[1])) + 0.005) / 0.02) * 0.02);
+const xPct = (v: number) => (100 * Math.min(v, scaleMax) / scaleMax).toFixed(2) + '%';
+const ticks = Array.from({ length: Math.round(scaleMax / 0.02) + 1 }, (_, i) => i * 0.02);
+const families: any[] = (latest as any).families ?? [];
+const familyOf = (m: string) => families.find(fam => fam.members.includes(m));
+const famName = (fam: any) => `${vendorName(fam.members[0])} ${nameOf(fam.base).replace(/^[a-z]+$/, (w: string) => w[0].toUpperCase() + w.slice(1))}`;
+const famId = (fam: any) => fam.alias.slice(1, -'-latest'.length).replace(/\//g, '-');
+const TASK: Record<string, string> = { banking77: 'Banking intents', claim: 'Claim checking', clinc: 'Assistant intents', entity: 'Record matching', guardrail: 'Content moderation', logs: 'Log triage', rag: 'Retrieval relevance', review: 'Review sentiment', support: 'Support routing', tool: 'Tool selection', value: 'Field extraction' };
+// The alias's current version against the version before it, e.g. Jev 1.14 vs 1.13
+const upgradeOf = (fam: any) => { const i = fam.members.indexOf(fam.current); if (i < 1) return null; const p = fam.pairs.find((x: any) => x.a === fam.members[i - 1] && x.b === fam.current); return p ? { fam, from: fam.members[i - 1], to: fam.current, p } : null; };
+const upgrades = families.map(upgradeOf).filter(Boolean) as any[];
+const verNote = (m: string) => { const u = upgrades.find(x => x.to === m); return u ? { text: `${pct(u.p.overall.flip_rate)} differ from ${nameOf(u.from)}`, href: `/versions/#${famId(u.fam)}` } : null; };
 
 // ---------- stability ranking ----------
 const COMP = [['time', 'Over time'], ['repeat', 'On repeat'], ['reorder', 'Option order'], ['reword', 'Rewording']] as const;
@@ -450,7 +453,7 @@ ${p.id === 'overall' ? `<div class="rk-weights" id="rk-weights" hidden><div clas
 ${p.rows.map(r => {
   const over = r.value > p.max;
   let used = 0; const segs = r.segs.filter(s => s.v > 0.05).map(s => { const room = Math.max(0, p.max - used); const v = Math.min(s.v, room); used += s.v; return v > 0 ? `<span class="seg s-${s.k}" style="width:${w(v)}"></span>` : ''; }).join('');
-  return `${r.sep ? '<div class="rk-sep" role="presentation"></div>' : ''}<div class="rk-row" role="row"><span class="rk-n" role="cell">${r.rank}</span><span class="rk-nm" role="cell"><a href="/models/${slug(r.m)}/"><b>${esc(nameOf(r.m))}</b><small>${esc(vendorName(r.m))}</small></a>${r.flag ? '<em class="flag">▲ change detected</em>' : ''}${p.id === 'overall' && verNote(r.m) ? `<a class="ver" href="${verNote(r.m)!.href}">${esc(verNote(r.m)!.text)} →</a>` : ''}</span>
+  return `${r.sep ? '<div class="rk-sep" role="presentation"></div>' : ''}<div class="rk-row" role="row"><span class="rk-n" role="cell">${r.rank}</span><span class="rk-nm" role="cell"><a href="/models/${slug(r.m)}/"><b>${esc(nameOf(r.m))}</b><small>${esc(vendorName(r.m))}</small></a>${r.flag ? `<em class="flag">▲ ${esc(lc(verdict(r.m).label))}</em>` : ''}${p.id === 'overall' && verNote(r.m) ? `<a class="ver" href="${verNote(r.m)!.href}">${esc(verNote(r.m)!.text)} →</a>` : ''}</span>
 <span class="rk-bar" role="cell"><span class="stack${over ? ' over' : ''}" tabindex="0" data-tip="${esc(r.tip)}" aria-label="${esc(r.tip)}">${segs || '<span class="seg zero"></span>'}</span>${r.ci ? `<span class="whisk" style="left:${w(r.ci[0])};width:calc(${w(r.ci[1])} - ${w(r.ci[0])})"></span>` : ''}</span><span class="rk-v" role="cell">${r.label}</span></div>`;
 }).join('')}</div></div>`;
 }
@@ -459,7 +462,7 @@ const rankTable = `<div class="rk-table" id="rk-table" hidden><table><thead><tr>
 // data the PNG export draws from (only what is on screen)
 const exportData = { date: latest.date, provisional, panels: panels.map(p => ({ id: p.id, title: p.title, sub: p.sub, unit: p.unit, max: p.max, ticks: p.ticks,
   rows: p.rows.map(r => ({ rank: r.rank, name: nameOf(r.m), vendor: vendorName(r.m), segs: r.segs, value: r.value, label: r.label, ci: r.ci ?? null, sep: r.sep, flag: r.flag })) })),
-  weights: { comps: COMP, scales: stOf(ranked[0]).scales, defaults: stOf(ranked[0]).weights, models: ranked.map(m => ({ name: nameOf(m), vendor: vendorName(m), href: `/models/${slug(m)}/`, flag: flagged.has(m), ver: verNote(m), c: stOf(m).components })) } };
+  weights: { comps: COMP, scales: stOf(ranked[0]).scales, defaults: stOf(ranked[0]).weights, models: ranked.map(m => ({ name: nameOf(m), vendor: vendorName(m), href: `/models/${slug(m)}/`, flag: flagged.has(m) ? lc(verdict(m).label) : '', ver: verNote(m), c: stOf(m).components })) } };
 
 const RANK_JS = `(()=>{const tabs=[...document.querySelectorAll('.rk-tabs [role=tab]')];const panels=[...document.querySelectorAll('.rk-panel')];const table=document.getElementById('rk-table');const tbtn=document.getElementById('rk-tablebtn');
 function select(id,push){tabs.forEach(t=>{const on=t.dataset.id===id;t.setAttribute('aria-selected',on);t.tabIndex=on?0:-1});panels.forEach(p=>p.hidden=p.id!=='panel-'+id||!table.hidden);if(push)history.replaceState(null,'',id==='overall'?location.pathname:'#'+id)}
@@ -502,7 +505,7 @@ const chart = `<div class="dc" role="group" aria-label="Recent change in answers
 <ol>${ordered.map((m, i) => {
   const d = drift(m, latest)!; const p = latest.perModel[m]; const hot = verdict(m).key === 'changed'; const x = d.flip_rate / scaleMax;
   const tip = `${nameOf(m)}: ${pct(d.flip_rate)} recent change (95% CI ${ci(d.ci)}). Noise ${pct(p.noise.flip_rate)}.`;
-  const grp = i === 0 && detected.length ? `<li class="dc-grp">Change detected</li>` : i === detected.length ? `<li class="dc-grp">No change detected, steadiest first</li>` : '';
+  const grp = i === 0 && detected.length ? `<li class="dc-grp">Changed in the last ${FLAG_DAYS} days</li>` : i === detected.length ? `<li class="dc-grp">No confirmed change in the last ${FLAG_DAYS} days, steadiest first</li>` : '';
   return `${grp}<li class="dc-row${hot ? ' is-hot' : ''}"><a class="nm" href="/models/${slug(m)}/"><b>${esc(nameOf(m))}</b><small>${esc(vendorName(m))}</small></a>
 <div class="track">${ticks.slice(1, -1).map(t => `<span class="grid" style="left:${xPct(t)}"></span>`).join('')}<span class="band" style="width:${xPct(p.noise.ci[1])}" title="Noise: changes up to ${pct(p.noise.ci[1])} can't be told apart from it"></span><span class="ci" style="left:${xPct(d.ci[0])};width:calc(${xPct(d.ci[1])} - ${xPct(d.ci[0])})"></span><span class="dot" style="left:${xPct(d.flip_rate)}"></span><span class="hit" style="left:${xPct(d.flip_rate)}" tabindex="0" data-tip="${esc(tip)}" aria-label="${esc(tip)}"></span><span class="val${d.ci[1] / scaleMax > 0.82 ? ' flip' : ''}" style="left:${xPct(d.ci[1] / scaleMax > 0.82 ? d.ci[0] : Math.max(d.ci[1], d.flip_rate))}">${pct(d.flip_rate)}</span></div>
 <div class="nt">${notes(m).map(esc).join(' ')}</div></li>`;
@@ -514,9 +517,9 @@ ${rankSection}
 
 write('changes/index.html', page({ path: '/changes/', title: 'Recent answer changes', description: 'How much each decision model\'s answers changed over the last 30 days, against its own noise.', body: `
 <div class="rk-top"><h1>Recent answer changes</h1><span class="wm" aria-hidden="true">decisiondrift.dev</span></div>
-<p class="dek">Today's answers against the last 30 days, recent days weighted more. Flagged when the whole interval clears the noise band.</p>
+<p class="dek">Dots: today's answers against the last 30 days, recent days weighted more. Highlighted: a change confirmed in the last ${FLAG_DAYS} days, as listed in the log below.</p>
 ${[...sameDays].filter(d => dayNum(latest.date) - dayNum(d) <= 30).map(d => `<p class="callout">${shortDate(d)}: ${changedOn.get(d)!.length} models changed on the same run. That points to a change on OpenRouter's side, not at each vendor.</p>`).join('')}
-<div class="key"><span><i class="k-band"></i>Noise: same request sent twice</span><span><i class="k-dot"></i>Recent change</span><span><i class="k-ci"></i>Its 95% interval</span><span><i class="k-hot"></i>Change detected</span></div>
+<div class="key"><span><i class="k-band"></i>Noise: same request sent twice</span><span><i class="k-dot"></i>Recent change</span><span><i class="k-ci"></i>Its 95% interval</span><span><i class="k-hot"></i>Changed in the last ${FLAG_DAYS} days</span></div>
 ${chart}
 ${fresh.length ? `<p class="sub-list">First run, no comparison yet: ${fresh.map(m => `<a href="/models/${slug(m)}/">${esc(nameOf(m))}</a>`).join(', ')}.</p>` : ''}
 ${logHtml}
@@ -528,7 +531,7 @@ const modelRow = (m: string) => {
   const p = latest.perModel[m]; const d = drift(m, latest); const hot = verdict(m).key === 'changed';
   const rk = rankOf.get(m); const st = p.stability;
   return `<tr><td class="num-rank">${rk ?? ''}</td><td class="l"><a href="/models/${slug(m)}/">${esc(isAlias(m) ? m : nameOf(m))}</a><small>${esc(isAlias(m) ? 'serves ' + p.served.join(', ') : vendorName(m))}</small></td>
-<td>${rk && st ? `<b>${st.index.toFixed(0)}</b>` : '—'}</td><td class="${hot ? 'hot' : ''}">${d?.n ? pct(d.flip_rate) : '—'}${hot ? '<small class="hot">detected</small>' : ''}</td><td>${pct(p.noise.flip_rate)}</td><td class="opt">${pct(p.shuffle.flip_rate)}</td><td class="opt">${pct(p.paraphrase.flip_rate)}</td>
+<td>${rk && st ? `<b>${st.index.toFixed(0)}</b>` : '—'}</td><td class="${hot ? 'hot' : ''}">${d?.n ? pct(d.flip_rate) : '—'}${hot ? `<small class="hot">${esc(lc(verdict(m).label))}</small>` : ''}</td><td>${pct(p.noise.flip_rate)}</td><td class="opt">${pct(p.shuffle.flip_rate)}</td><td class="opt">${pct(p.paraphrase.flip_rate)}</td>
 <td class="opt">${ms(p.latency_p50)}</td></tr>`;
 };
 const tableHead = `<thead><tr><th>#</th><th class="l">Model</th><th>Index</th><th>Recent<span class="long"> change</span></th><th>Noise</th><th class="opt">Option shuffle</th><th class="opt">Paraphrase</th><th class="opt">Median latency</th></tr></thead>`;
@@ -567,14 +570,14 @@ for (const m of models) {
 <p class="crumb"><a href="/models/">Models</a> / ${esc(isAlias(m) ? 'Aliases' : vendorName(m))}</p>
 <h1>${esc(isAlias(m) ? m : nameOf(m))}</h1>
 <p class="meta">${isAlias(m) ? `Alias. Serves ${esc(last.served.join(', '))}.` : `Snapshot ${esc(last.served.join(', '))}. ${servedLine(m, last)}`}${familyOf(m) ? ` <a href="/versions/#${famId(familyOf(m))}">Compare versions</a>.` : ''}</p>
-<div class="stats"><div><b>${rankOf.has(m) ? `#${rankOf.get(m)} of ${ranked.length}` : '—'}</b><span>${rankOf.has(m) ? `stability, index ${last.stability.index.toFixed(0)}` : 'not ranked yet'}</span></div><div><b class="${hot ? 'hot' : ''}">${d?.n ? pct(d.flip_rate) : '—'}</b><span>recent change${hot ? ', change detected' : ''}</span></div><div><b>${pct(last.noise.flip_rate)}</b><span>noise</span></div><div><b>${pct(last.accuracy)}</b><span>gold accuracy</span></div></div>
+<div class="stats"><div><b>${rankOf.has(m) ? `#${rankOf.get(m)} of ${ranked.length}` : '—'}</b><span>${rankOf.has(m) ? `stability, index ${last.stability.index.toFixed(0)}` : 'not ranked yet'}</span></div><div><b class="${hot ? 'hot' : ''}">${d?.n ? pct(d.flip_rate) : '—'}</b><span>recent change${hot ? `, ${esc(lc(verdict(m).label))}` : ''}</span></div><div><b>${pct(last.noise.flip_rate)}</b><span>noise</span></div><div><b>${pct(last.accuracy)}</b><span>gold accuracy</span></div></div>
 <h2>Daily runs</h2>
 <div class="days" role="img" aria-label="One square per day, each compared with the previous run">${squares}</div>
 <div class="days-axis"><span>${shortDate(dayList[0])}</span><span>${shortDate(dayList.at(-1)!)}</span></div>
 <div class="legend"><span><i class="d-base"></i>First run</span><span><i class="d-ok"></i>No change detected</span><span><i class="d-hot"></i>Change detected</span><span><i class="d-miss"></i>No run</span></div>
 ${last.drift_recent?.n ? (() => { const r = last.drift_recent; const top = last.noise.ci[1];
   return `<h2 id="recent">Recent change</h2>
-<p>${hot ? `<strong class="hot">Change detected:</strong> ${pct(r.rate)} (${ci(r.ci)}), above noise (up to ${pct(top)}).` : `No change detected: ${pct(r.rate)} (${ci(r.ci)}), within noise (up to ${pct(top)}).`} Against the last 30 days, weighted by recency; the squares compare only with the previous day.</p>
+<p>${hotVs(r, last) ? `<strong class="hot">Above noise:</strong> ${pct(r.rate)} (${ci(r.ci)}), noise up to ${pct(top)}.` : `Within noise: ${pct(r.rate)} (${ci(r.ci)}), noise up to ${pct(top)}.`} Against the last 30 days, weighted by recency; the squares compare only with the previous day.</p>
 <table class="narrow"><thead><tr><th class="l">Compared with</th><th>Weight</th><th>Changed</th><th class="opt">95% CI</th></tr></thead><tbody>${r.by_run.map((b: any) => `<tr><td class="l">${shortDate(b.date)}</td><td>${Math.round(b.weight * 100)}%</td><td>${pct(b.flip_rate)}</td><td class="opt">${ci(b.ci)}</td></tr>`).join('')}</tbody></table>`; })() : ''}
 <h2>Run history</h2>
 <table><thead><tr><th>Run</th>${snaps.length > 1 ? '<th class="l opt">Snapshot</th>' : ''}<th>Changed<span class="long"> vs previous</span></th><th class="opt">95% CI</th><th class="opt">Became right / wrong</th><th>Noise</th><th class="opt">Shuffle</th><th class="opt">Paraphrase</th><th>Gold acc.</th><th class="opt">p50</th></tr></thead><tbody>${rows}</tbody></table>
@@ -615,7 +618,7 @@ write('method/index.html', page({ path: '/method/', title: 'Method', description
 <ul>
 <li><strong>Recent change:</strong> today's top answers against each run in the last 30 days, weighted by recency (half-life 7 days, zero at 30).</li>
 <li><strong>Noise:</strong> answers that change when 100 inputs are re-sent minutes later, pooled over 7 days.</li>
-<li><strong>Change detected:</strong> the change's 95% interval sits entirely above the noise interval. When ${SAME_DAY_MODELS}+ models from ${SAME_DAY_VENDORS}+ vendors change on the same run, it's marked as possibly a change on OpenRouter's side.</li>
+<li><strong>Change detected</strong> (red squares): a run's answers differ from the previous run's, with the 95% interval entirely above the noise interval. It's confirmed when the next run still differs from the run before the change, and then listed in the log. Models with a confirmed change in the last ${FLAG_DAYS} days are flagged in the rankings. When ${SAME_DAY_MODELS}+ models from ${SAME_DAY_VENDORS}+ vendors change on the same run, it's marked as possibly a change on OpenRouter's side.</li>
 <li><strong>Option order, rewording:</strong> answers that change when options are shuffled or instructions reworded.</li>
 <li><strong>Accuracy:</strong> on clear-cut questions with an agreed answer. A sanity check, not a ranking.</li>
 </ul>
