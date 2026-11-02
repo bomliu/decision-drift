@@ -237,7 +237,7 @@ button:focus-visible{outline:2px solid var(--link);outline-offset:2px}
 .rk-sub{color:var(--muted);font-size:15px;margin:0 0 10px}
 table.vers td{white-space:nowrap}
 details.tasks{margin:10px 0 0}details.tasks summary{cursor:pointer;color:var(--muted);font-size:14px}details.tasks table{margin-top:8px}
-.ver-line{font-size:15px;margin:14px 0 0}.ver-line a{font-weight:600}
+.ver-line{font-size:15px;margin:14px 0 0;max-width:none}.ver-line span{white-space:nowrap}.ver-line a{font-weight:600}
 .rk-nm .flag{display:block;font-style:normal;font-size:12px;font-weight:600;color:var(--hot)}
 .rk-bar .stack.over::after{content:"";position:absolute;right:-1px;top:-2px;bottom:-2px;width:6px;background:repeating-linear-gradient(135deg,var(--bg) 0 2px,transparent 2px 4px)}
 .rk-bar .seg.zero{width:2px;background:var(--faint)}
@@ -265,7 +265,7 @@ table.narrow{max-width:560px}
 .stats div{padding:14px 16px 14px 0}.stats b{display:block;font-size:26px;font-weight:700;line-height:1.2}.stats span{color:var(--faint);font-size:14px}
 /* daily squares */
 .days{display:flex;gap:4px;margin:0 0 6px}.days span{flex:1 1 0;height:34px;border-radius:2px;min-width:0}
-.d-base{background:var(--base)}.d-ok{background:var(--ok)}.d-hot{background:var(--hot)}.d-miss{border:1px dashed var(--faint)}.d-future{background:var(--soft)}
+.d-base{background:var(--base)}.d-ok{background:var(--ok)}.d-hot{background:var(--hot)}.d-un{box-shadow:inset 0 0 0 2px var(--hot)}.d-miss{border:1px dashed var(--faint)}.d-future{background:var(--soft)}
 .days-axis{display:flex;justify-content:space-between;color:var(--faint);font-size:13px;margin:0 0 8px}
 .legend{display:flex;flex-wrap:wrap;gap:6px 18px;color:var(--muted);font-size:13px;margin:0 0 8px}.legend i{display:inline-block;width:12px;height:12px;border-radius:2px;margin-right:6px;vertical-align:-1px}
 /* prose */
@@ -328,6 +328,13 @@ fs.rmSync(OUT, { recursive: true, force: true });
 // ---------- change log: generated from the data, no prose ----------
 // A change is logged on the run where it first shows against the previous run, once the next run confirms it
 // (still different from the run before the change). Snapshot moves and new models are logged the day they happen.
+// A change on run i is confirmed when the next run still differs from the run before the change.
+function confirmedAt(m: string, h: { date: string; p: any }[], i: number) {
+  const p = h[i].p, d = prevDrift(p), next = h[i + 1]?.p;
+  if (!hotVs(d, p) || !next) return false;
+  const before = next.drift_recent?.by_run?.find((b: any) => b.date === d.date);
+  return before ? hotVs(before, next) : hotVs(drift(m, reportOn.get(h[i + 1].date)!), next);
+}
 const reportOn = new Map(reports.map(r => [r.date, r]));
 type LogEntry = { date: string; m: string; kind: 'change' | 'serve' | 'new' | 'listing' | 'outage' | 'sameday'; text: string };
 const changeLog: LogEntry[] = [];
@@ -359,10 +366,8 @@ for (const m of models) {
     if (p.provider_pin && !h[i - 1].p.provider_pin) { changeLog.push({ date, m, kind: 'serve', text: `Requests now pinned to ${p.provider_pin.name}, the maker. Earlier runs were mostly answered by other hosts, so comparisons restart here.` }); return; }
     const prev = h[i - 1].p.served.join(', '), cur = p.served.join(', ');
     if (cur && prev && cur !== prev) changeLog.push({ date, m, kind: 'serve', text: `Now serves ${cur} (was ${prev}).` });
-    const d = prevDrift(p); const next = h[i + 1]?.p;
-    if (isAlias(m) || !hotVs(d, p) || !next) return;
-    const before = next.drift_recent?.by_run?.find((b: any) => b.date === d.date);
-    if (!(before ? hotVs(before, next) : hotVs(drift(m, reportOn.get(h[i + 1].date)!), next))) return;
+    const d = prevDrift(p);
+    if (isAlias(m) || !confirmedAt(m, h, i)) return;
     const span = Math.round((new Date(date).getTime() - new Date(d.date).getTime()) / 864e5) > 1 ? `between ${shortDate(d.date)} and ${shortDate(date)}` : `on ${shortDate(date)}`;
     changeLog.push({ date, m, kind: 'change', text: `Changed ${span}: ${pct(d.flip_rate)} of answers differ from the previous run, against ${pct(p.noise.flip_rate)} noise.${cur === prev ? ' Same snapshot ID.' : ''}${d.direction ? ` Graded answers: ${d.direction.fixed} became right, ${d.direction.broke} became wrong.` : ''}${sameDays.has(date) ? ' Changed alongside several other models; possibly OpenRouter-side.' : ''}` });
   });
@@ -492,7 +497,7 @@ const rankSection = `<section class="rk-wrap" aria-labelledby="rk-title">
 <div class="rk-tools"><button type="button" id="rk-wbtn" aria-expanded="false" aria-controls="rk-weights">Weights</button><button type="button" id="rk-link">Copy link</button><button type="button" id="rk-png">Download image</button><button type="button" id="rk-tablebtn" aria-pressed="false">Table</button></div></div>
 ${panels.map((p, i) => panelHtml(p, i === 0)).join('')}
 ${rankTable}
-${upgrades.length ? `<p class="ver-line">Upgrading changes answers: ${upgrades.map(u => `<a href="/versions/#${famId(u.fam)}">${esc(vendorName(u.to))} ${esc(nameOf(u.from))} → ${esc(nameOf(u.to))}</a> ${pct(u.p.overall.flip_rate)}`).join(' · ')}</p>` : ''}
+${upgrades.length ? `<p class="ver-line">Upgrading changes answers: ${upgrades.map(u => `<span><a href="/versions/#${famId(u.fam)}">${esc(vendorName(u.to))} ${esc(nameOf(u.from))} → ${esc(nameOf(u.to))}</a> ${pct(u.p.overall.flip_rate)}</span>`).join(' · ')}</p>` : ''}
 <p class="foot"><a href="/method/#stability">How the index works</a></p>
 <p id="rk-toast" class="toast" role="status" hidden></p>
 <script type="application/json" id="rk-data">${JSON.stringify(exportData).replace(/</g, '\\u003c')}</script>
@@ -558,7 +563,10 @@ for (const m of models) {
     if (!(p.decisions > 0)) return `<span class="d-miss" data-tip="${shortDate(d)}: no answers (${p.requests} calls failed)"></span>`;
     const dr = prevDrift(p);
     if (!dr) return `<span class="d-base" data-tip="${shortDate(d)}: first run"></span>`;
-    return `<span class="${hotVs(dr, p) ? 'd-hot' : 'd-ok'}" data-tip="${shortDate(d)}: ${pct(dr.flip_rate)} changed vs ${shortDate(dr.date)}, noise ${pct(p.noise.flip_rate)}"></span>`;
+    const i = h.findIndex(x => x.date === d); const ok = hotVs(dr, p) && confirmedAt(m, h, i);
+    const cls = !hotVs(dr, p) ? 'd-ok' : ok ? 'd-hot' : 'd-un';
+    const note = cls !== 'd-un' ? '' : i === h.length - 1 ? '; awaiting the next run to confirm' : '; not confirmed by the next run';
+    return `<span class="${cls}" data-tip="${shortDate(d)}: ${pct(dr.flip_rate)} changed vs ${shortDate(dr.date)}, noise ${pct(p.noise.flip_rate)}${note}"></span>`;
   }).join('');
   const d = drift(m, latest); const hot = verdict(m).key === 'changed';
   const snaps = [...new Set(h.flatMap(x => x.p.served))];
@@ -574,7 +582,7 @@ for (const m of models) {
 <h2>Daily runs</h2>
 <div class="days" role="img" aria-label="One square per day, each compared with the previous run">${squares}</div>
 <div class="days-axis"><span>${shortDate(dayList[0])}</span><span>${shortDate(dayList.at(-1)!)}</span></div>
-<div class="legend"><span><i class="d-base"></i>First run</span><span><i class="d-ok"></i>No change detected</span><span><i class="d-hot"></i>Change detected</span><span><i class="d-miss"></i>No run</span></div>
+<div class="legend"><span><i class="d-base"></i>First run</span><span><i class="d-ok"></i>No change detected</span><span><i class="d-hot"></i>Change, confirmed</span><span><i class="d-un"></i>Change, not confirmed</span><span><i class="d-miss"></i>No run</span></div>
 ${last.drift_recent?.n ? (() => { const r = last.drift_recent; const top = last.noise.ci[1];
   return `<h2 id="recent">Recent change</h2>
 <p>${hotVs(r, last) ? `<strong class="hot">Above noise:</strong> ${pct(r.rate)} (${ci(r.ci)}), noise up to ${pct(top)}.` : `Within noise: ${pct(r.rate)} (${ci(r.ci)}), noise up to ${pct(top)}.`} Against the last 30 days, weighted by recency; the squares compare only with the previous day.</p>
