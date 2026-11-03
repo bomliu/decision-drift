@@ -1,15 +1,15 @@
 {
  "last_run": {
-  "date": "2026-11-02",
+  "date": "2026-11-03",
   "run": "daily",
   "status": "ok",
-  "finished_at": "2026-11-02T10:39:20.674Z"
+  "finished_at": "2026-11-03T10:39:49.835Z"
  },
  "schedule": "daily at 10:17 UTC",
  "models": 30,
  "requests": 22230,
- "errors": 13,
+ "errors": 9,
  "models_with_errors": [],
- "run_cost_usd": 0.9156990909999994,
- "key_usage_usd": 9.83935213
+ "run_cost_usd": 0.9157922169999994,
+ "key_usage_usd": 10.936701825
 }
