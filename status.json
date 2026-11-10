@@ -1,17 +1,17 @@
 {
  "last_run": {
-  "date": "2026-11-09",
+  "date": "2026-11-10",
   "run": "daily",
   "status": "ok",
-  "finished_at": "2026-11-09T10:43:36.301Z"
+  "finished_at": "2026-11-10T10:44:08.003Z"
  },
  "schedule": "daily at 10:17 UTC",
- "models": 31,
- "requests": 22242,
+ "models": 32,
+ "requests": 22983,
  "errors": 21,
  "models_with_errors": [
   "cloudflare/clairic"
  ],
- "run_cost_usd": 0.9230985959999994,
- "key_usage_usd": 17.687917371
+ "run_cost_usd": 0.9360902989999995,
+ "key_usage_usd": 18.808440242
 }
