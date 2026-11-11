@@ -30,6 +30,11 @@ node src/report.ts --date YYYY-MM-DD --run day1 --dup day1-dup
 ```
 The runner stops when the key's spend for the current UTC day reaches `BUDGET_STOP` (default $5; OpenRouter's daily window resets at 00:00 UTC).
 
+Before pushing a code change, run the check. It sends one public item per family to every model, confirms the answers parse, and builds the site. It takes about a minute and costs a few cents on your key. A single model's outage is listed as a warning and does not fail the check.
+```bash
+node src/check.ts [--models id1,id2] [--deadline 60]
+```
+
 ## Method notes
 - Questions follow the published System One conventions (instructions, criteria, an explicit `none` option). They are identical for every model and are **never tuned against results**.
 - **Gold labels:** a question is gold only when the reference label agrees with both independent LLM labelers (GPT-6.1 Sol and Gemini 4 Argon). The reference label comes from the item's author, the source dataset, or the generator for synthetic logs.

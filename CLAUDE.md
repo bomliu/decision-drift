@@ -33,6 +33,9 @@ node src/run.ts --items suite/core-v1.public.jsonl,private/core-v1.private.jsonl
 node src/run.ts --items private/noise-subset-v1.jsonl --run daily-dup
 node src/report.ts --date YYYY-MM-DD --run daily --dup daily-dup --compare-date 2026-10-20 --compare-run day1
 
+# Pre-push check for code changes (about a minute, a few cents): one public item per family to every model, then a site build
+node src/check.ts [--models id1,id2] [--deadline 60]
+
 # Site
 node src/site.ts [--out site-dist] [--drafts true]   # builds static HTML into site-dist/
 node src/serve.ts                                     # serves SITE_DIR (default site-dist) on PORT (default 8080)
