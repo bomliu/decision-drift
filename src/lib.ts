@@ -63,8 +63,10 @@ export async function fetchCatalog(): Promise<CatalogModel[]> {
   const r = await fetch(MODELS_URL);
   if (!r.ok) throw new Error(`catalog ${r.status}`);
   const d = (await r.json()) as any;
+  // A ":free" listing is skipped only when its paid twin is listed too; a model that exists only as ":free" is kept.
+  const ids = new Set<string>(d.data.map((m: any) => m.id));
   return d.data
-    .filter((m: any) => !m.id.endsWith(':free'))
+    .filter((m: any) => !(m.id.endsWith(':free') && ids.has(m.id.slice(0, -':free'.length))))
     .map((m: any) => ({ id: m.id, canonical_slug: m.canonical_slug, prompt_price: Number(m.pricing?.prompt ?? 0), context_length: m.context_length }));
 }
 
