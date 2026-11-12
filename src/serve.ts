@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 const dir = path.resolve(process.env.SITE_DIR ?? 'site-dist');
-const types: Record<string, string> = { '.html': 'text/html; charset=utf-8', '.css': 'text/css', '.js': 'text/javascript', '.json': 'application/json', '.xml': 'application/rss+xml', '.txt': 'text/plain; charset=utf-8', '.svg': 'image/svg+xml', '.gz': 'application/gzip', '.jsonl': 'application/x-ndjson', '.ico': 'image/x-icon' };
+const types: Record<string, string> = { '.html': 'text/html; charset=utf-8', '.css': 'text/css', '.js': 'text/javascript', '.json': 'application/json', '.xml': 'application/rss+xml', '.txt': 'text/plain; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png','.gz': 'application/gzip', '.jsonl': 'application/x-ndjson', '.ico': 'image/x-icon' };
 
 http.createServer((req, res) => {
   const url = decodeURIComponent((req.url ?? '/').split('?')[0]);

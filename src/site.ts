@@ -2,6 +2,8 @@
 // Usage: node src/site.ts [--out site-dist]
 import fs from 'node:fs';
 import path from 'node:path';
+import os from 'node:os';
+import { execFileSync } from 'node:child_process';
 import { ROOT } from './lib.ts';
 
 const args = Object.fromEntries(process.argv.slice(2).reduce<string[][]>((acc, a, i, all) => {
@@ -301,11 +303,14 @@ const TIP_JS = `const t=document.getElementById('tip');function show(el){t.textC
 const tipOf=e=>e.target.closest&&e.target.closest('[data-tip]');document.addEventListener('mouseover',e=>{const el=tipOf(e);if(el)show(el);else t.style.display='none'});document.addEventListener('focusin',e=>{const el=tipOf(e);if(el)show(el)});document.addEventListener('focusout',()=>t.style.display='none');`;
 
 const NAV: [string, string][] = [['/models/', 'Models'], ['/changes/', 'Changes'], ['/versions/', 'Versions'], ['/method/', 'Method'], ['/data/', 'Data']];
-function page(p: { path: string; title: string; description: string; body: string }) {
+function page(p: { path: string; title: string; description: string; body: string; card?: Card }) {
+  const img = p.card ?? GENERIC_CARD;
   const full = p.path === '/' ? 'Decision Drift: daily answer drift in decision models' : `${p.title} · Decision Drift`;
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${esc(full)}</title><meta name="description" content="${esc(p.description)}"><link rel="canonical" href="${SITE}${p.path}">
-<meta property="og:title" content="${esc(full)}"><meta property="og:description" content="${esc(p.description)}"><meta property="og:type" content="website"><meta property="og:url" content="${SITE}${p.path}">
+<meta property="og:title" content="${esc(full)}"><meta property="og:description" content="${esc(p.description)}"><meta property="og:type" content="website"><meta property="og:url" content="${SITE}${p.path}"><meta property="og:site_name" content="Decision Drift">
+<meta property="og:image" content="${SITE}${img.src}"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630"><meta property="og:image:alt" content="${esc(img.alt)}">
+<meta name="twitter:card" content="summary_large_image"><meta name="twitter:image" content="${SITE}${img.src}">
 <link rel="alternate" type="application/rss+xml" title="Decision Drift" href="/feed.xml">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,500;6..72,600&family=Public+Sans:wght@400;600;700&display=swap" rel="stylesheet">
@@ -325,6 +330,59 @@ function write(rel: string, content: string) {
 
 // ---------- pages ----------
 fs.rmSync(OUT, { recursive: true, force: true });
+
+// ---------- social share cards ----------
+// The image a link preview shows (og:image). Previews don't render SVG, so each card is drawn as SVG here and
+// converted to PNG by a system tool: rsvg-convert in the site Docker image, sips on macOS. With neither, or if a
+// conversion fails, the page uses the committed generic card (src/og-card.png, drawn from src/og-card.svg).
+// Keep the SVG plain: one <text> per line (sips ignores tspan positioning) and no CSS.
+// Fonts: Georgia and Arial on macOS. The Docker image has Gelasio Bold (deploy/fonts, same letter widths as Georgia)
+// and Liberation Sans (same widths as Arial), so cards lay out the same in both places.
+const SERIF = `Georgia, Gelasio, 'Liberation Serif', 'Times New Roman', serif`, SANS = `Arial, 'Liberation Sans', Helvetica, sans-serif`;
+const C = { ink: '#1C2127', muted: '#4A5560', faint: '#7B8794', soft: '#F3F5F7', ok: '#9FB3C8', hot: '#C2410C' };
+const GENERIC_CARD = { src: '/og-card.png', alt: 'Decision Drift: do decision models change their answers?' };
+type Card = { src: string; alt: string };
+const cardTmp = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-cards-'));
+function toPng(tool: string, svgFile: string, pngFile: string) {
+  if (tool === 'rsvg') execFileSync('rsvg-convert', [`--output=${pngFile}`, svgFile], { stdio: 'ignore' });
+  else execFileSync('sips', ['-s', 'format', 'png', svgFile, '--out', pngFile], { stdio: 'ignore' });
+  if (!fs.existsSync(pngFile)) throw new Error('no PNG written');
+}
+// Pick the converter by trying each on a tiny probe image.
+const cardTool = ['rsvg', 'sips'].find(tool => {
+  const svg = path.join(cardTmp, 'probe.svg'), png = path.join(cardTmp, `probe-${tool}.png`);
+  fs.writeFileSync(svg, '<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><rect width="4" height="4" fill="#000"/></svg>');
+  try { toPng(tool, svg, png); return true; } catch { return false; }
+}) ?? null;
+const cardText = (x: number, y: number, size: number, s: string, o: { font?: string; weight?: number; fill?: string; anchor?: string } = {}) =>
+  `<text x="${x}" y="${y}" font-family="${o.font ?? SANS}" font-size="${size}" font-weight="${o.weight ?? 400}" fill="${o.fill ?? C.ink}"${o.anchor ? ` text-anchor="${o.anchor}"` : ''}>${esc(s)}</text>`;
+// There are no font metrics here, so text is sized by a rough average glyph width, on the wide side.
+const fitSize = (s: string, max: number, width = 1040, avg = 0.6) => Math.min(max, Math.floor(width / (s.length * avg)));
+// Arial and Liberation Sans share metrics, so a number's width is known: digits 0.556em, % 0.889em, . 0.278em.
+const numWidth = (s: string, size: number) => size * [...s].reduce((w, ch) => w + (ch === '%' ? 0.889 : ch === '.' ? 0.278 : 0.556), 0);
+function wrapText(s: string, maxChars: number) {
+  const lines: string[] = [];
+  for (const w of s.split(' ')) { if (lines.length && (lines.at(-1)! + ' ' + w).length <= maxChars) lines[lines.length - 1] += ' ' + w; else lines.push(w); }
+  return lines;
+}
+// Same meanings and colours as the day squares on a model page.
+const SQUARE: Record<string, string> = { 'd-base': `fill="${C.ink}"`, 'd-ok': `fill="${C.ok}"`, 'd-hot': `fill="${C.hot}"`, 'd-future': `fill="${C.soft}"`,
+  'd-un': `fill="#FFFFFF" stroke="${C.hot}" stroke-width="3"`, 'd-miss': `fill="#FFFFFF" stroke="${C.faint}" stroke-width="1.5" stroke-dasharray="4 3"` };
+const cardSquare = (x: number, y: number, size: number, cls: string) => { const o = cls === 'd-un' || cls === 'd-miss' ? 1.5 : 0;
+  return `<rect x="${x + o}" y="${y + o}" width="${size - 2 * o}" height="${size - 2 * o}" rx="3" ${SQUARE[cls] ?? SQUARE['d-future']}/>`; };
+// Header shared with the generic card: top bar, mark, name, domain.
+const cardFrame = (inner: string) => `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630"><rect width="1200" height="630" fill="#FFFFFF"/><rect width="1200" height="10" fill="${C.ink}"/><rect x="80" y="96" width="54" height="18" rx="9" fill="${C.ok}"/><circle cx="155" cy="105" r="15" fill="${C.hot}"/>${cardText(190, 118, 38, 'Decision Drift', { font: SERIF, weight: 700 })}${cardText(1120, 118, 28, 'decisiondrift.dev', { weight: 700, anchor: 'end' })}${inner}</svg>`;
+let cardCount = 0;
+// Writes cards/<rel>.png and returns the card for page(). `version` goes in the URL so a card that changes daily
+// isn't served from a platform's cache of yesterday's image.
+function card(rel: string, inner: string, alt: string, version = ''): Card {
+  if (!cardTool) return GENERIC_CARD;
+  const png = path.join(OUT, 'cards', rel + '.png'), svg = path.join(cardTmp, `${cardCount}.svg`);
+  try {
+    fs.mkdirSync(path.dirname(png), { recursive: true }); fs.writeFileSync(svg, cardFrame(inner)); toPng(cardTool, svg, png); cardCount++;
+    return { src: `/cards/${rel}.png${version ? `?v=${version}` : ''}`, alt };
+  } catch (e) { console.warn(`share card ${rel} failed, using the generic card: ${(e as Error).message.split('\n')[0]}`); return GENERIC_CARD; }
+}
 // ---------- change log: generated from the data, no prose ----------
 // A change is logged on the run where it first shows against the previous run, once the next run confirms it
 // (still different from the run before the change). Snapshot moves and new models are logged the day they happen.
@@ -516,7 +574,23 @@ const chart = `<div class="dc" role="group" aria-label="Recent change in answers
 <div class="nt">${notes(m).map(esc).join(' ')}</div></li>`;
 }).join('')}</ol></div>`;
 
-write('index.html', page({ path: '/', title: 'Most stable decision models', description: 'Daily ranking of decision models (Jev, Clef, Decider, Luna and more) by how often their answers change.', body: `
+// share card: the top three of the ranking, drawn like the rows of the ranking above (stacked bar per model)
+const CARD_SEG: Record<string, string> = { time: '#2a78d6', repeat: '#1baf7a', reorder: '#6250d6', reword: '#eda100' }; // --c-time etc. in the page CSS
+const homeCard = ranked.length < 3 ? undefined : (() => {
+  const top = ranked.slice(0, 3); const BAR_X = 620, BAR_W = 400; const scale = BAR_W / Math.max(...top.map(m => stOf(m).index));
+  const rows = top.flatMap((m, i) => { const y = 336 + i * 68; const st = stOf(m); let x = BAR_X;
+    const segs = COMP.filter(([k]) => st.parts[k] > 0.05).map(([k]) => { const w = st.parts[k] * scale; const r = `<rect x="${x.toFixed(1)}" y="${y - 25}" width="${w.toFixed(1)}" height="24" fill="${CARD_SEG[k]}"/>`; x += w; return r; });
+    return [cardText(80, y, 36, String(i + 1), { weight: 700, fill: C.faint }), cardText(136, y, fitSize(nameOf(m), 36, 450), nameOf(m), { weight: 700 }), cardText(136, y + 25, 20, vendorName(m), { fill: C.faint }),
+      ...segs, cardText(Math.round(x) + 14, y - 2, 28, st.index.toFixed(0), { weight: 700 })]; });
+  let kx = 80; const key = COMP.flatMap(([k, label]) => { const at = kx; kx += 14 + 8 + Math.round(label.length * 11.5) + 26;
+    return [`<rect x="${at}" y="532" width="14" height="14" rx="2" fill="${CARD_SEG[k]}"/>`, cardText(at + 22, 546, 22, label, { fill: C.faint })]; });
+  return card('home', [
+    cardText(80, 228, 60, 'Most stable decision models', { font: SERIF, weight: 700 }),
+    cardText(80, 268, 22, `Instability index, lower is better. ${ranked.length} models ranked.`, { fill: C.muted }),
+    ...rows, ...key, cardText(1120, 546, 22, `Run of ${dateLong(latest.date)}`, { fill: C.faint, anchor: 'end' }),
+  ].join(''), `Most stable decision models, run of ${dateLong(latest.date)}: ${top.map((m, i) => `${i + 1}. ${vendorName(m)} ${nameOf(m)} (index ${stOf(m).index.toFixed(0)})`).join(', ')}.`, latest.date);
+})();
+write('index.html', page({ path: '/', title: 'Most stable decision models', description: 'Daily ranking of decision models (Jev, Clef, Decider, Luna and more) by how often their answers change.', card: homeCard, body: `
 ${rankSection}
 ` }));
 
@@ -556,25 +630,39 @@ for (const m of models) {
   const h = history(m); const last = h.at(-1)?.p; if (!last) continue;
   const byDate = new Map(h.map(x => [x.date, x.p]));
   const first = h[0].date;
-  const squares = dayList.map(d => {
+  // one day's square: used by the page (with its tooltip) and by the share card
+  const day = (d: string): { cls: string; tip?: string } => {
     const p = byDate.get(d);
-    if (d < first) return `<span class="d-future" data-tip="${shortDate(d)}: not tracked yet" tabindex="-1"></span>`;
-    if (!p) return d <= latest.date ? `<span class="d-miss" data-tip="${shortDate(d)}: no run"></span>` : `<span class="d-future"></span>`;
-    if (!(p.decisions > 0)) return `<span class="d-miss" data-tip="${shortDate(d)}: no answers (${p.requests} calls failed)"></span>`;
+    if (d < first) return { cls: 'd-future', tip: `${shortDate(d)}: not tracked yet` };
+    if (!p) return d <= latest.date ? { cls: 'd-miss', tip: `${shortDate(d)}: no run` } : { cls: 'd-future' };
+    if (!(p.decisions > 0)) return { cls: 'd-miss', tip: `${shortDate(d)}: no answers (${p.requests} calls failed)` };
     const dr = prevDrift(p);
-    if (!dr) return `<span class="d-base" data-tip="${shortDate(d)}: first run"></span>`;
+    if (!dr) return { cls: 'd-base', tip: `${shortDate(d)}: first run` };
     const i = h.findIndex(x => x.date === d); const ok = hotVs(dr, p) && confirmedAt(m, h, i);
     const cls = !hotVs(dr, p) ? 'd-ok' : ok ? 'd-hot' : 'd-un';
     const note = cls !== 'd-un' ? '' : i === h.length - 1 ? '; awaiting the next run to confirm' : '; not confirmed by the next run';
-    return `<span class="${cls}" data-tip="${shortDate(d)}: ${pct(dr.flip_rate)} changed vs ${shortDate(dr.date)}, noise ${pct(p.noise.flip_rate)}${note}"></span>`;
-  }).join('');
+    return { cls, tip: `${shortDate(d)}: ${pct(dr.flip_rate)} changed vs ${shortDate(dr.date)}, noise ${pct(p.noise.flip_rate)}${note}` };
+  };
+  const squares = dayList.map(d => { const x = day(d); return `<span class="${x.cls}"${x.tip ? ` data-tip="${x.tip}"` : ''}${d < first ? ' tabindex="-1"' : ''}></span>`; }).join('');
   const d = drift(m, latest); const hot = verdict(m).key === 'changed';
+  // share card: name, recent change against noise, the last 30 days, run date
+  const strip = Array.from({ length: 30 }, (_, i) => new Date(Date.parse(latest.date + 'T00:00:00Z') - (29 - i) * 864e5).toISOString().slice(0, 10));
+  const cardName = isAlias(m) ? m : nameOf(m); const big = d?.n ? pct(d.flip_rate) : ''; const labelX = 80 + Math.round(numWidth(big, 112)) + 28;
+  const modelCard = card(`models/${slug(m)}`, [
+    cardText(80, 215, 30, isAlias(m) ? 'Alias' : vendorName(m), { fill: C.muted }),
+    cardText(80, 300, fitSize(cardName, 84), cardName, { font: SERIF, weight: 700 }),
+    ...(big ? [cardText(80, 440, 112, big, { weight: 700, fill: hot ? C.hot : C.ink }), cardText(labelX, 396, 32, 'of answers changed recently'),
+      cardText(labelX, 440, 28, `Noise ${pct(last.noise.flip_rate)} · ${verdict(m).label}`, { fill: C.muted })]
+      : [cardText(80, 420, 36, `No recent-change figure in the ${shortDate(latest.date)} run`, { fill: C.muted })]),
+    ...strip.map((dt, i) => cardSquare(80 + i * 35, 482, 25, day(dt).cls)),
+    cardText(80, 546, 22, shortDate(strip[0]), { fill: C.faint }), cardText(1120, 546, 22, `Run of ${dateLong(latest.date)}`, { fill: C.faint, anchor: 'end' }),
+  ].join(''), big ? `${m}: ${big} of answers changed recently, noise ${pct(last.noise.flip_rate)}. Run of ${dateLong(latest.date)}.` : `${m} on Decision Drift. Run of ${dateLong(latest.date)}.`, latest.date);
   const snaps = [...new Set(h.flatMap(x => x.p.served))];
   const rows = h.slice().reverse().map(({ date, p }) => {
     const dr = prevDrift(p); const rh = hotVs(dr, p);
     return `<tr><td>${shortDate(date)}</td>${snaps.length > 1 ? `<td class="l opt">${esc(p.served.join(', '))}</td>` : ''}<td class="${rh ? 'hot' : ''}">${dr?.n ? pct(dr.flip_rate) : 'first run'}</td><td class="opt">${dr?.n ? ci(dr.ci) : ''}</td><td class="opt">${dr?.direction && dr.flips ? `${dr.direction.fixed} / ${dr.direction.broke}` : ''}</td><td>${pct(p.noise.flip_rate)}</td><td class="opt">${pct(p.shuffle.flip_rate)}</td><td class="opt">${pct(p.paraphrase.flip_rate)}</td><td>${pct(p.accuracy)}</td><td class="opt">${ms(p.latency_p50)}</td></tr>`;
   }).join('');
-  write(`models/${slug(m)}/index.html`, page({ path: `/models/${slug(m)}/`, title: m, description: `Daily drift, noise and robustness for ${m}.`, body: `
+  write(`models/${slug(m)}/index.html`, page({ path: `/models/${slug(m)}/`, title: m, description: `Daily drift, noise and robustness for ${m}.`, card: modelCard, body: `
 <p class="crumb"><a href="/models/">Models</a> / ${esc(isAlias(m) ? 'Aliases' : vendorName(m))}</p>
 <h1>${esc(isAlias(m) ? m : nameOf(m))}</h1>
 <p class="meta">${isAlias(m) ? `Alias. Serves ${esc(last.served.join(', '))}.` : `Snapshot ${esc(last.served.join(', '))}. ${servedLine(m, last)}`}${familyOf(m) ? ` <a href="/versions/#${famId(familyOf(m))}">Compare versions</a>.` : ''}</p>
@@ -609,7 +697,13 @@ ${fam.pairs.map((p: any) => `<details class="tasks"><summary>By task${fam.pairs.
 redirect('findings/jev-1-13-vs-1-14/index.html', '/versions/');
 if (posts.length) {
   write('posts/index.html', page({ path: '/posts/', title: 'Findings', description: 'Write-ups from the Decision Drift tracker.', body: `<h1>Findings</h1><ul class="posts">${posts.map(p => `<li><a href="/posts/${p.slug}/">${esc(p.title)}</a><div class="when">${dateLong(p.date)}</div></li>`).join('')}</ul>` }));
-  for (const p of posts) write(`posts/${p.slug}/index.html`, page({ path: `/posts/${p.slug}/`, title: p.title, description: p.summary, body: `<article><h1>${esc(p.title)}</h1>${p.html.replace(/<div class="table-wrap">/g, '<div class="tw">')}</article>` }));
+  // share card: the post's title, wrapped to at most a few lines
+  const postCard = (p: { slug: string; title: string; date: string }) => {
+    const perLine = (size: number) => Math.floor(1040 / (size * 0.58)); const size = [68, 60, 52, 44].find(sz => wrapText(p.title, perLine(sz)).length <= 3) ?? 44;
+    return card(`posts/${p.slug}`, [...wrapText(p.title, perLine(size)).slice(0, 4).map((l, i) => cardText(80, 250 + i * Math.round(size * 1.18), size, l, { font: SERIF, weight: 700 })),
+      cardText(80, 546, 24, `Finding · ${dateLong(p.date)}`, { fill: C.faint })].join(''), p.title);
+  };
+  for (const p of posts) write(`posts/${p.slug}/index.html`, page({ path: `/posts/${p.slug}/`, title: p.title, description: p.summary, card: postCard(p), body: `<article><h1>${esc(p.title)}</h1>${p.html.replace(/<div class="table-wrap">/g, '<div class="tw">')}</article>` }));
 } else redirect('posts/index.html', '/');
 redirect('posts/microsoft-decision-1-same-snapshot/index.html', '/models/microsoft--microsoft-decision-1/');
 
@@ -637,6 +731,10 @@ write('method/index.html', page({ path: '/method/', title: 'Method', description
 <h2>Limits</h2>
 <p>OpenRouter's decisions API is in alpha. Mostly English. Missing days aren't backfilled.</p>
 </article>` }));
+
+// Social share card, one image for every page. Source is src/og-card.svg; after editing it, regenerate on macOS with:
+//   sips -s format png src/og-card.svg --out src/og-card.png
+fs.copyFileSync(path.join(ROOT, 'src/og-card.png'), path.join(OUT, 'og-card.png'));
 
 // data + status
 fs.mkdirSync(path.join(OUT, 'data'), { recursive: true });
@@ -691,4 +789,6 @@ ${posts.map(p => `- [${p.title}](${SITE}/posts/${p.slug}/): ${p.summary}`).join(
 - [Source and raw results](${REPO})
 `);
 write('404.html', page({ path: '/404', title: 'Not found', description: 'Page not found.', body: '<h1>No page here</h1><p>Try the <a href="/">tracker</a> or the <a href="/models/">models table</a>.</p>' }));
+fs.rmSync(cardTmp, { recursive: true, force: true });
 console.log(`built ${pages.length} pages into ${path.relative(ROOT, OUT)} from ${reports.length} runs`);
+console.log(cardTool ? `share cards: ${cardCount} drawn with ${cardTool === 'rsvg' ? 'rsvg-convert' : 'sips'}` : 'share cards: no SVG converter found, every page uses the generic card');

@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <!-- Source for src/og-card.png (the social share card). Regenerate the PNG after editing: see the comment in src/site.ts. -->
+  <rect width="1200" height="630" fill="#FFFFFF"/>
+  <rect x="0" y="0" width="1200" height="10" fill="#1C2127"/>
+
+  <!-- mark: same bar + dot as the favicon -->
+  <rect x="80" y="96" width="54" height="18" rx="9" fill="#9FB3C8"/>
+  <circle cx="155" cy="105" r="15" fill="#C2410C"/>
+  <text x="190" y="118" font-family="Georgia, 'Times New Roman', serif" font-size="38" font-weight="600" fill="#1C2127">Decision Drift</text>
+
+  <!-- one <text> per line: sips ignores tspan positioning -->
+  <text x="80" y="318" font-family="Georgia, 'Times New Roman', serif" font-size="76" font-weight="600" fill="#1C2127">Do decision models</text>
+  <text x="80" y="406" font-family="Georgia, 'Times New Roman', serif" font-size="76" font-weight="600" fill="#1C2127">change their answers?</text>
+
+  <!-- a run of days: steady, then one that moved -->
+  <g fill="#9FB3C8">
+    <rect x="80" y="496" width="62" height="14" rx="7"/>
+    <rect x="156" y="496" width="62" height="14" rx="7"/>
+    <rect x="232" y="496" width="62" height="14" rx="7"/>
+    <rect x="308" y="496" width="62" height="14" rx="7"/>
+    <rect x="384" y="496" width="62" height="14" rx="7"/>
+    <rect x="460" y="496" width="62" height="14" rx="7"/>
+    <rect x="612" y="496" width="62" height="14" rx="7"/>
+    <rect x="688" y="496" width="62" height="14" rx="7"/>
+  </g>
+  <rect x="536" y="474" width="62" height="14" rx="7" fill="#C2410C"/>
+
+  <text x="1120" y="118" text-anchor="end" font-family="Arial, Helvetica, sans-serif" font-size="28" font-weight="700" fill="#1C2127">decisiondrift.dev</text>
+</svg>
