@@ -1,18 +1,17 @@
 {
  "last_run": {
-  "date": "2026-11-12",
+  "date": "2026-11-13",
   "run": "daily",
   "status": "ok",
-  "finished_at": "2026-11-12T13:22:24.504Z"
+  "finished_at": "2026-11-13T10:36:26.727Z"
  },
  "schedule": "daily at 10:17 UTC",
- "models": 34,
- "requests": 24287,
- "errors": 129,
+ "models": 38,
+ "requests": 27429,
+ "errors": 35,
  "models_with_errors": [
-  "cloudflare/clairic",
-  "upstage/solar-decide"
+  "cloudflare/clairic"
  ],
- "run_cost_usd": 0.9438505489999998,
- "key_usage_usd": 21.194455339
+ "run_cost_usd": 1.3770331690000002,
+ "key_usage_usd": 22.976573388
 }
