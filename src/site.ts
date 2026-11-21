@@ -38,6 +38,8 @@ const history = (m: string) => reports.map(r => ({ date: r.date, p: r.perModel[m
 // drift vs the day-1 baseline; on the baseline day itself there is nothing to compare
 // Recent change: today vs each run in the last 30 days, recent days weighted more (computed in report.ts)
 const drift = (m: string, r: Report) => { const x = r.perModel[m]?.drift_recent; return x?.n ? { n: x.n, flip_rate: x.rate, ci: x.ci } : null; };
+// Option shuffle and paraphrase are measured about weekly per model; other runs repeat the latest measurement and say when it was taken.
+const measuredOn = (x: any, date: string) => (x?.measured ?? date) === date;
 const prevDrift = (p: any) => p?.drift_vs_previous?.n ? p.drift_vs_previous : null;
 const hotVs = (d: any, p: any) => !!(d?.n && p?.noise?.ci && d.ci[0] > p.noise.ci[1]);
 // Flag: a change the log has confirmed (the next run still differs) on a run in the last FLAG_DAYS days.
@@ -408,7 +410,7 @@ for (const m of seen) {
   let everAnswered = false;
   reports.forEach((r, i) => {
     const p = r.perModel[m]; const was = i > 0 ? reports[i - 1].perModel[m] : undefined;
-    if (!p) { if (was) changeLog.push({ date: r.date, m, kind: 'listing', text: 'No longer listed on OpenRouter.' }); return; }
+    if (!p) { if (was) changeLog.push({ date: r.date, m, kind: 'listing', text: m in excluded ? `No longer tracked. ${excluded[m]}` : 'No longer listed on OpenRouter.' }); return; }
     if (!answeredOn(m, r)) {
       changeLog.push({ date: r.date, m, kind: everAnswered ? 'outage' : 'listing', text: everAnswered ? `No answers this run: all ${p.requests} calls failed.` : `Listed on OpenRouter, but no provider served it: all ${p.requests} calls failed.` });
       return;
@@ -496,7 +498,7 @@ const overall: Panel = (() => {
 const compPanels: Panel[] = COMP.map(([k, label]) => {
   const ms = ranked.slice().sort((a, b) => stOf(a).components[k] - stOf(b).components[k]);
   const ax = axisFor(ms.map(m => 100 * stOf(m).components[k]));
-  const sub = { time: "Recent change beyond the model's own noise: today against each of the last 30 days, recent days weighted more.", repeat: 'Share of answers that change when the same request is sent twice, minutes apart.', reorder: 'Share of pick-one answers that change when the options are reordered.', reword: 'Share of answers that change when the instructions are reworded with the same meaning.' }[k];
+  const sub = { time: "Recent change beyond the model's own noise: today against each of the last 30 days, recent days weighted more.", repeat: 'Share of answers that change when the same request is sent twice, minutes apart.', reorder: 'Share of pick-one answers that change when the options are reordered. Measured weekly.', reword: 'Share of answers that change when the instructions are reworded with the same meaning. Measured weekly.' }[k];
   return { id: k, tab: label, title: `${label}`, sub, unit: '%', max: ax.max, ticks: ax.ticks,
     rows: ms.map((m, i) => { const v = 100 * stOf(m).components[k];
       // equal shown values share a rank
@@ -660,7 +662,7 @@ for (const m of models) {
   const snaps = [...new Set(h.flatMap(x => x.p.served))];
   const rows = h.slice().reverse().map(({ date, p }) => {
     const dr = prevDrift(p); const rh = hotVs(dr, p);
-    return `<tr><td>${shortDate(date)}</td>${snaps.length > 1 ? `<td class="l opt">${esc(p.served.join(', '))}</td>` : ''}<td class="${rh ? 'hot' : ''}">${dr?.n ? pct(dr.flip_rate) : 'first run'}</td><td class="opt">${dr?.n ? ci(dr.ci) : ''}</td><td class="opt">${dr?.direction && dr.flips ? `${dr.direction.fixed} / ${dr.direction.broke}` : ''}</td><td>${pct(p.noise.flip_rate)}</td><td class="opt">${pct(p.shuffle.flip_rate)}</td><td class="opt">${pct(p.paraphrase.flip_rate)}</td><td>${pct(p.accuracy)}</td><td class="opt">${ms(p.latency_p50)}</td></tr>`;
+    return `<tr><td>${shortDate(date)}</td>${snaps.length > 1 ? `<td class="l opt">${esc(p.served.join(', '))}</td>` : ''}<td class="${rh ? 'hot' : ''}">${dr?.n ? pct(dr.flip_rate) : 'first run'}</td><td class="opt">${dr?.n ? ci(dr.ci) : ''}</td><td class="opt">${dr?.direction && dr.flips ? `${dr.direction.fixed} / ${dr.direction.broke}` : ''}</td><td>${pct(p.noise.flip_rate)}</td><td class="opt">${measuredOn(p.shuffle, date) ? pct(p.shuffle.flip_rate) : ''}</td><td class="opt">${measuredOn(p.paraphrase, date) ? pct(p.paraphrase.flip_rate) : ''}</td><td>${pct(p.accuracy)}</td><td class="opt">${ms(p.latency_p50)}</td></tr>`;
   }).join('');
   write(`models/${slug(m)}/index.html`, page({ path: `/models/${slug(m)}/`, title: m, description: `Daily drift, noise and robustness for ${m}.`, card: modelCard, body: `
 <p class="crumb"><a href="/models/">Models</a> / ${esc(isAlias(m) ? 'Aliases' : vendorName(m))}</p>
@@ -721,7 +723,7 @@ write('method/index.html', page({ path: '/method/', title: 'Method', description
 <li><strong>Recent change:</strong> today's top answers against each run in the last 30 days, weighted by recency (half-life 7 days, zero at 30).</li>
 <li><strong>Noise:</strong> answers that change when 100 inputs are re-sent minutes later, pooled over 7 days.</li>
 <li><strong>Change detected</strong> (red squares): a run's answers differ from the previous run's, with the 95% interval entirely above the noise interval. It's confirmed when the next run still differs from the run before the change, and then listed in the log. Models with a confirmed change in the last ${FLAG_DAYS} days are flagged in the rankings. When ${SAME_DAY_MODELS}+ models from ${SAME_DAY_VENDORS}+ vendors change on the same run, it's marked as possibly a change on OpenRouter's side.</li>
-<li><strong>Option order, rewording:</strong> answers that change when options are shuffled or instructions reworded.</li>
+<li><strong>Option order, rewording:</strong> answers that change when options are shuffled or instructions reworded. Measured once a week per model, and again when its snapshot ID changes; other days show the latest measurement.</li>
 <li><strong>Accuracy:</strong> on clear-cut questions with an agreed answer. A sanity check, not a ranking.</li>
 </ul>
 <h2 id="stability">Instability index</h2>
@@ -768,7 +770,7 @@ fs.writeFileSync(path.join(OUT, 'sitemap.xml'), `<?xml version="1.0" encoding="U
 fs.writeFileSync(path.join(OUT, 'robots.txt'), `User-agent: *\nAllow: /\nSitemap: ${SITE}/sitemap.xml\n`);
 fs.writeFileSync(path.join(OUT, 'llms.txt'), `# Decision Drift
 
-> An independent, daily tracker of decision models (typed-answer models such as TypeSafe Jev, Cloudflare Clef, Perplexity Decider, OpenAI Luna Decisions). Every compatible model on OpenRouter gets the same frozen probe suite every day; we report how many answers changed recently (each run against the last 30 days, decay-weighted) and day over day, each model's noise level, sensitivity to option order and paraphrase, gold-label accuracy and calibration, latency and errors.
+> An independent, daily tracker of decision models (typed-answer models such as TypeSafe Jev, Cloudflare Clef, Perplexity Decider, OpenAI Luna Decisions). Compatible models on OpenRouter get the same frozen probe suite every day (the few not run are listed on the models page); we report how many answers changed recently (each run against the last 30 days, decay-weighted) and day over day, each model's noise level, sensitivity to option order and paraphrase, gold-label accuracy and calibration, latency and errors.
 
 Latest run: ${latest.date}, ${latest.models} models, ${latest.items} states.
 Most stable${provisional ? ' (provisional)' : ''}, instability index (100 = average model, lower is better): ${ranked.slice(0, 5).map(m => `${nameOf(m)} ${stOf(m).index.toFixed(0)}`).join(', ')}. Least stable: ${ranked.slice(-2).map(m => `${nameOf(m)} ${stOf(m).index.toFixed(0)}`).join(', ')}.

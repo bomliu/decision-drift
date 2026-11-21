@@ -1,11 +1,11 @@
 # decision-drift
 
-An open, reproducible tracker for **decision models**: models such as TypeSafe Jev, Cloudflare Clef, Perplexity Decider and OpenAI Luna Decisions, which return typed answers with probabilities instead of text. Every hosted decision model on OpenRouter gets the same frozen probe suite every day. The tracker reports:
+An open, reproducible tracker for **decision models**: models such as TypeSafe Jev, Cloudflare Clef, Perplexity Decider and OpenAI Luna Decisions, which return typed answers with probabilities instead of text. Hosted decision models on OpenRouter get the same frozen probe suite every day; the few that aren't run are listed with the reason in `suite/models-excluded.json`. The tracker reports:
 
 - **Drift:** whether answers changed relative to day 1, beyond each model's own noise floor
 - **Noise floor:** how much answers change between identical requests sent minutes apart
 - **Silent snapshot swaps:** whether an alias quietly started pointing at a new version
-- **Robustness:** sensitivity to option order and to paraphrased instructions
+- **Robustness:** sensitivity to option order and to paraphrased instructions, measured once a week per model and again when its snapshot ID changes
 - **Accuracy and calibration** on gold-labeled questions
 - **Latency, error rate and cost**, as measured from the runner
 
@@ -15,7 +15,7 @@ An open, reproducible tracker for **decision models**: models such as TypeSafe J
 | `suite/core-v1.public.jsonl` | Public split of the v1 core suite. Append-only; items are never edited. |
 | `suite/manifest-v1.json` | Coverage, labeling method, and SHA-256 hashes of the public and private splits |
 | `suite/noise-ids-v1.json` | States re-sent for the noise-floor measurement |
-| `suite/models-excluded.json` | Models that can't answer the suite's question types, with the reason |
+| `suite/models-excluded.json` | Models that aren't run (can't answer the suite's question types, or too expensive to run daily), with the reason |
 | `private/` | Private split and drafts (**git-ignored**) |
 | `results/<date>/<run>/<model>.jsonl` | Raw responses for public items |
 | `reports/` | Per-run reports |

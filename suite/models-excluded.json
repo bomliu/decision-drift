@@ -1,4 +1,6 @@
 {
+  "parallel/decisions-fast": "Too expensive to run daily: about $0.84 a day on the full suite. Tracked until 2026-11-20.",
+  "heygen/heygen-decision-1": "Too expensive to run daily: about $0.34 a day on the full suite. Tracked until 2026-11-20.",
   "respan/span-01": "Answers yes/no questions only.",
   "respan/span-01-lite": "Answers yes/no questions only."
 }

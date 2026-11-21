@@ -31,9 +31,16 @@ const windowDates = allDates.filter(d => dayNum(date) - dayNum(d) <= WINDOW && m
 const dupDates = new Set(windowDates.filter(d => fs.existsSync(path.join(ROOT, 'results', d, mainRunOf(d) + '-dup'))));
 const poolDates = new Set([...dupDates].slice(-(POOL - 1)));
 type Lite = Map<string, { top: string; req?: string; type?: string }>;
-const lite = (recs: Rec[] | undefined): Lite => new Map([...index(recs, 'base')].map(([k, n]) => [k, { top: n.top, req: n.req, type: n.type }]));
+const liteOf = (a: Answers): Lite => new Map([...a].map(([k, n]) => [k, { top: n.top, req: n.req, type: n.type }]));
+const lite = (recs: Rec[] | undefined): Lite => liteOf(index(recs, 'base'));
+// Robustness (option shuffle, paraphrase): the variant answers against the same run's base answers. The runner sends
+// the variants to each model about once a week, so a run without them uses the model's latest earlier measurement.
+type Robust = { summary: ReturnType<typeof compare>; flips: number[] };
+const robustOf = (base: Answers, recs: Rec[] | undefined, variant: string): Robust | null => { const v = index(recs, variant); return v.size ? { summary: compare(base, v, undefined, true), flips: flips(base, v, true) } : null; };
 const past = windowDates.map(d => { const r = mainRunOf(d)!; const m0 = loadRun(d, r); const d0 = dupDates.has(d) ? loadRun(d, r + '-dup') : new Map<string, Rec[]>();
-  return { date: d, main: new Map([...m0.keys()].map(m => [m, lite(m0.get(m))])), dup: new Map([...d0.keys()].map(m => [m, lite(d0.get(m))])) }; });
+  const main = new Map<string, Lite>(), robust = new Map<string, { shuffle: Robust | null; para: Robust | null }>();
+  for (const [m, recs] of m0) { const b = index(recs, 'base'); main.set(m, liteOf(b)); robust.set(m, { shuffle: robustOf(b, recs, 'shuffle'), para: robustOf(b, recs, 'para') }); }
+  return { date: d, main, robust, dup: new Map([...d0.keys()].map(m => [m, lite(d0.get(m))])) }; });
 const olderThanWindow = allDates.length > 0 && allDates[0] < (windowDates[0] ?? date);
 
 type Answers = Map<string, Norm>; // key `${item}|${qid}`
@@ -127,6 +134,13 @@ for (const m of models) {
   const recs = main.get(m)!;
   const base = index(recs, 'base');
   const rc = dup.get(m) ? recentChange(m, base, rateOf(flips(base, index(dup.get(m), 'base'))).flip_rate, rateOf(pooledNoise(m, base)).flip_rate) : null;
+  // Today's variants if the model got them; otherwise its latest measurement in the window (none on a day without answers).
+  const robust = (kind: 'shuffle' | 'para'): Robust & { measured: string | null } => {
+    const today = robustOf(base, recs, kind); if (today) return { ...today, measured: date };
+    const p = base.size ? past.findLast(r => inSeries(m, r.date) && r.robust.get(m)?.[kind]) : undefined;
+    return p ? { ...p.robust.get(m)![kind]!, measured: p.date } : { summary: compare(base, new Map(), undefined, true), flips: [], measured: null };
+  };
+  const sh = robust('shuffle'), pa = robust('para');
   const ok = recs.filter(r => r.ok), lat = ok.map(r => r.latency_ms);
   const baseRecs = recs.filter(r => r.variant === 'base');
   const cost = recs.reduce((s, r) => s + Number(r.usage?.cost ?? 0), 0);
@@ -161,13 +175,13 @@ for (const m of models) {
     noise_pooled: dup.get(m) ? { ...rateOf(pooledNoise(m, base)), runs: [...past.filter(r => poolDates.has(r.date) && inSeries(m, r.date) && r.dup.has(m)).map(r => r.date), date] } : null,
     noise_same_provider: compare(base, index(dup.get(m), 'base'), (k, x) => x.provider === index(dup.get(m), 'base').get(k)?.provider),
     noise_cross_provider: compare(base, index(dup.get(m), 'base'), (k, x) => { const y = index(dup.get(m), 'base').get(k); return !!y && x.provider !== y.provider; }),
-    shuffle: compare(base, index(recs, 'shuffle'), undefined, true),
-    paraphrase: compare(base, index(recs, 'para'), undefined, true),
+    shuffle: { ...sh.summary, measured: sh.measured },
+    paraphrase: { ...pa.summary, measured: pa.measured },
     drift_vs_compare: cmp.size ? { ...compare(index(cmp.get(m), 'base'), base), direction: direction(index(cmp.get(m), 'base'), base) } : null,
     drift_vs_previous: (() => { const p = past.filter(r => r.main.has(m) && inSeries(m, r.date)).at(-1); return p ? { date: p.date, ...rateOf(flips(p.main.get(m)!, base)), direction: direction(p.main.get(m)!, base) } : null; })(),
     drift_recent: rc?.summary ?? null,
     stability: (() => { const dupBase = index(dup.get(m), 'base'); if (!dupBase.size) return null;
-      return stability(rc?.per ?? null, rc?.expected ?? 0, pooledNoise(m, base), flips(base, index(recs, 'shuffle'), true), flips(base, index(recs, 'para'), true)); })(),
+      return stability(rc?.per ?? null, rc?.expected ?? 0, pooledNoise(m, base), sh.flips, pa.flips); })(),
     drift_by_type: cmp.size ? Object.fromEntries(['noul', 'choice', 'score'].map(t => [t, compare(index(cmp.get(m), 'base'), base, k => qType(k) === t)])) : null,
   };
 }
@@ -218,6 +232,7 @@ const pct = (x: number) => Number.isFinite(x) ? (x * 100).toFixed(1) + '%' : '�
 const ci = (c: number[]) => Number.isFinite(c[0]) ? `${(c[0] * 100).toFixed(1)}–${(c[1] * 100).toFixed(1)}%` : '—';
 let md = `# Run report: ${date} / ${run}\n\n${items.length} core states, ${models.length} models. Noise run: ${args.dup ?? 'none'}. Drift compared against: ${args['compare-run'] ?? 'none'}.\n\n`;
 md += `Private-split items are included in these aggregates; no private item text appears in this report.\n\n`;
+md += `Shuffle and paraphrase variants go to each model about once a week; on other days these columns repeat the model's latest measurement.\n\n`;
 md += `## Per-model summary\n\n| Model | Err | p50 ms | p95 ms | Acc (gold) | 95% CI | Over-conf | ECE | Noise flip | Shuffle flip | Para flip | Drift flip vs ${args['compare-run'] ?? '—'} | $/1k req |\n|---|---|---|---|---|---|---|---|---|---|---|---|---|\n`;
 for (const m of models.sort((a, b) => (perModel[b].accuracy || 0) - (perModel[a].accuracy || 0))) {
   const p = perModel[m];

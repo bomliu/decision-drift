@@ -157,3 +157,25 @@ export function shuffled<T>(arr: T[], seed: string): T[] {
   for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(r() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; }
   return a;
 }
+
+// Which models are due for the robustness variants (shuffle, para) on `date`, read from this run's earlier reports.
+// Robustness belongs to the snapshot, so it is measured once every `every` days per model rather than daily. A model
+// is due when no report in the previous `every - 1` days measured the variants for it (a new model is due at once),
+// or when its served snapshot ID has changed since they were measured.
+export function variantsDue(run: string, date: string, every: number): (model: string) => boolean {
+  if (!(every > 1)) return () => true;
+  const day = (d: string) => Math.round(new Date(d + 'T00:00:00Z').getTime() / 864e5);
+  const dir = path.join(ROOT, 'reports');
+  const recent = (fs.existsSync(dir) ? fs.readdirSync(dir) : [])
+    .filter(f => f.slice(10) === `-${run}.json` && f.slice(0, 10) < date && day(date) - day(f.slice(0, 10)) < every).sort()
+    .map(f => ({ date: f.slice(0, 10), perModel: JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8')).perModel as Record<string, any> }));
+  // reports carry the latest measurement forward and say when it was taken; older reports measured every day
+  const measuredOn = (p: any, d: string) => !!p && ['shuffle', 'paraphrase'].some(k => p[k]?.n > 0 && (p[k].measured ?? d) === d);
+  const snapshot = (p: any) => [...(p?.served ?? [])].sort().join();
+  return (model) => {
+    const last = recent.findLast(r => measuredOn(r.perModel[model], r.date));
+    if (!last) return true;
+    const now = snapshot(recent.at(-1)!.perModel[model]);
+    return now !== '' && now !== snapshot(last.perModel[model]);
+  };
+}

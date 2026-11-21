@@ -1,8 +1,9 @@
 // Runs probe items against decision models and stores raw responses.
-// Usage: node src/run.ts --items suite/core.jsonl,private/core.jsonl --run base [--models all|id1,id2] [--variants shuffle,para] [--per-model 3] [--parallel-models 6]
+// Usage: node src/run.ts --items suite/core.jsonl,private/core.jsonl --run base [--models all|id1,id2] [--variants shuffle,para] [--variants-every 7] [--per-model 3] [--parallel-models 6]
+// --variants-every N sends the variants to a model only when it is due (see variantsDue in lib.ts); other models get base requests only.
 import fs from 'node:fs';
 import path from 'node:path';
-import { ROOT, type Item, type Question, fetchCatalog, decide, keyUsage, BUDGET_STOP, pool, loadItems, sha256, canonical, shuffled } from './lib.ts';
+import { ROOT, type Item, type Question, fetchCatalog, decide, keyUsage, BUDGET_STOP, pool, loadItems, sha256, canonical, shuffled, variantsDue } from './lib.ts';
 
 const args = Object.fromEntries(process.argv.slice(2).reduce<string[][]>((acc, a, i, all) => {
   if (a.startsWith('--')) acc.push([a.slice(2), all[i + 1] && !all[i + 1].startsWith('--') ? all[i + 1] : 'true']);
@@ -53,8 +54,14 @@ const pins: Record<string, { provider: string; since: string }> = JSON.parse(fs.
 const pinOf = (m: string) => (pins[m]?.provider && pins[m].since <= date ? pins[m].provider : null);
 const models = args.models && args.models !== 'all' ? args.models.split(',') : catalog.map(m => m.id).filter(id => !(id in excluded));
 
+// Variants go only to the models that are due for them; the rest get the base requests.
+const baseJobs = jobs.filter(j => j.variant === 'base');
+const due = variantsDue(runName, date, Number(args['variants-every'] ?? 1));
+const jobsFor = new Map(models.map(m => [m, variants.size && due(m) ? jobs : baseJobs]));
+const dueCount = [...jobsFor.values()].filter(j => j !== baseJobs).length;
+
 const start = await keyUsage();
-console.log(`run=${runName} date=${date} items=${items.length} jobs/model=${jobs.length} models=${models.length} key_usage_today=$${start.daily.toFixed(4)} stop_at=$${BUDGET_STOP}/day`);
+console.log(`run=${runName} date=${date} items=${items.length} jobs/model=${baseJobs.length}${variants.size ? ` (${jobs.length} with variants, due for ${dueCount} of ${models.length} models)` : ''} models=${models.length} key_usage_today=$${start.daily.toFixed(4)} stop_at=$${BUDGET_STOP}/day`);
 if (!Number.isFinite(start.daily)) { console.error('Cannot read key spend from OpenRouter; refusing to run without the budget check.'); process.exit(2); }
 if (start.daily >= BUDGET_STOP) { console.error('Budget stop reached before start.'); process.exit(2); }
 
@@ -71,7 +78,7 @@ await pool(models, parallelModels, async (model) => {
     return opened[k]!;
   };
   let consecutiveFail = 0;
-  await pool(jobs, perModel, async (job) => {
+  await pool(jobsFor.get(model)!, perModel, async (job) => {
     if (stopped || consecutiveFail >= 8) return;
     const pin = pinOf(model);
     const res = await decide(model, job.item.state, job.questions, pin ? { provider: { only: [pin], allow_fallbacks: false } } : {});

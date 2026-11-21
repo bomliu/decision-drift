@@ -25,11 +25,11 @@ decision-drift is an open daily tracker of **decision models** on OpenRouter (mo
 Every script is `node src/<name>.ts` with `--flag value` arguments; usage is in each file's header comment.
 
 ```bash
-# Full daily collection (core run with shuffle+para variants, noise duplicates, report vs. day-1 baseline)
+# Full daily collection (core run, shuffle+para variants weekly per model, noise duplicates, report vs. day-1 baseline)
 scripts/daily.sh [run-name]          # env: RUN_DATE=YYYY-MM-DD, RUN_MODELS=a,b to limit models
 
 # Pieces of it
-node src/run.ts --items suite/core-v1.public.jsonl,private/core-v1.private.jsonl --run daily --variants shuffle,para [--models id1,id2] [--limit N] [--date YYYY-MM-DD]
+node src/run.ts --items suite/core-v1.public.jsonl,private/core-v1.private.jsonl --run daily --variants shuffle,para [--variants-every 7] [--models id1,id2] [--limit N] [--date YYYY-MM-DD]
 node src/run.ts --items private/noise-subset-v1.jsonl --run daily-dup
 node src/report.ts --date YYYY-MM-DD --run daily --dup daily-dup --compare-date 2026-10-20 --compare-run day1
 
@@ -48,9 +48,9 @@ node src/serve.ts                                     # serves SITE_DIR (default
 **Data flow:** suite → `run.ts` → raw results → `report.ts` → `reports/<date>-<run>.{md,json}` → `site.ts` → static site.
 
 - `src/lib.ts`: shared core. `Item`/`Question` types (question types `noul` | `choice` | `score`), OpenRouter calls (`decide` with retries/backoff, `chat` for labelers, `fetchCatalog`, `keyUsage`), `BUDGET_STOP`, `canonical` (sorted-key JSON) + `sha256` for request/suite hashes, the deterministic `rng`/`shuffled` (seeded by item/question id, so variants are identical every day), `pool` for concurrency, `readJsonl` (reads `.jsonl` or `.jsonl.gz` transparently), and `redact` (strips OpenRouter `user_id`s from error bodies before anything is saved).
-- `src/run.ts`: builds jobs per item (`base`, plus `shuffle` = choice criteria reordered, `para` = paraphrased instructions from the item's `paraphrases`). Models = OpenRouter catalog minus `suite/models-excluded.json`. `suite/provider-pins.json` pins listed models to their maker without fallback from `since`. Each record gets a `req_hash`. Records go to `results/<date>/<run>/<model>.jsonl` for public items and `private/results/...` for items with `split: 'private'`.
+- `src/run.ts`: builds jobs per item (`base`, plus `shuffle` = choice criteria reordered, `para` = paraphrased instructions from the item's `paraphrases`). Models = OpenRouter catalog minus `suite/models-excluded.json`. With `--variants-every 7` (what `daily.sh` passes), a model gets the variants only when `variantsDue` in `lib.ts` says so: no measurement in this run's reports for the previous 6 days, or its served snapshot ID changed. `suite/provider-pins.json` pins listed models to their maker without fallback from `since`. Each record gets a `req_hash`. Records go to `results/<date>/<run>/<model>.jsonl` for public items and `private/results/...` for items with `split: 'private'`.
 - `src/answers.ts`: normalizes raw answers into a common `Norm` (top answer + distribution) plus metric helpers (`tv`, `wilson`, `quantile`, `goldMatches`, `loadRun`). Used by `report.ts` and `select.ts`.
-- `src/report.ts`: per-model metrics for one run. It reads both splits, uses a 30-day window of earlier runs, and pools noise over the last 7 runs that had a `-dup` run.
+- `src/report.ts`: per-model metrics for one run. It reads both splits, uses a 30-day window of earlier runs, and pools noise over the last 7 runs that had a `-dup` run. On a run where a model got no variants, `shuffle`/`paraphrase` repeat its latest measurement in the window, with a `measured` date.
 - `src/site.ts`: builds the whole site from the committed `reports/*.json` (the `2026-10-20` `day1` baseline plus later `daily` runs), `suite/manifest-v1.json`, `status.json` and `posts/*.md`. `private/post-drafts/` is included only with `--drafts true`. `src/site-weights.js` is browser JS inlined into the home page.
 - `src/status.ts` writes `status.json`. `src/compact.ts` slims and gzips finished result files in place.
 
