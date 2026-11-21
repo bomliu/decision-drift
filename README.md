@@ -17,7 +17,7 @@ An open, reproducible tracker for **decision models**: models such as TypeSafe J
 | `suite/noise-ids-v1.json` | States re-sent for the noise-floor measurement |
 | `suite/models-excluded.json` | Models that aren't run (can't answer the suite's question types, or too expensive to run daily), with the reason |
 | `private/` | Private split and drafts (**git-ignored**) |
-| `results/<date>/<run>/<model>.jsonl` | Raw responses for public items |
+| `results/<date>/<run>/<model>.jsonl` | Raw responses for public items. `_catalog.json` beside them is OpenRouter's catalog on that day (snapshot slugs, expiry dates). |
 | `reports/` | Per-run reports |
 | `src/` | Zero-dependency TypeScript (Node ≥ 23 runs it directly) |
 

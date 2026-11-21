@@ -64,6 +64,14 @@ const start = await keyUsage();
 console.log(`run=${runName} date=${date} items=${items.length} jobs/model=${baseJobs.length}${variants.size ? ` (${jobs.length} with variants, due for ${dueCount} of ${models.length} models)` : ''} models=${models.length} key_usage_today=$${start.daily.toFixed(4)} stop_at=$${BUDGET_STOP}/day`);
 if (!Number.isFinite(start.daily)) { console.error('Cannot read key spend from OpenRouter; refusing to run without the budget check.'); process.exit(2); }
 if (start.daily >= BUDGET_STOP) { console.error('Budget stop reached before start.'); process.exit(2); }
+// Keep what the catalog said on the day of the run (snapshot slug, expiry date), so reports can show a planned
+// retirement before the model disappears. Skipped for a back-dated run: the catalog is today's, not that day's.
+// Written only once the run is going ahead: collect.sh treats an existing results dir as a finished collection.
+if (date === new Date().toISOString().slice(0, 10)) {
+  const dir = path.join(ROOT, 'results', date, runName);
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, '_catalog.json'), JSON.stringify({ fetched_at: new Date().toISOString(), models: catalog.map(m => ({ id: m.id, canonical_slug: m.canonical_slug, expiration_date: m.expiration_date })) }, null, 1) + '\n');
+}
 
 let done = 0, failed = 0, spent = 0, stopped = false;
 const t0 = Date.now();

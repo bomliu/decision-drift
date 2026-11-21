@@ -129,6 +129,10 @@ function recentChange(m: string, base: Answers, todayNoise: number, pooled: numb
     by_run: [...share].sort((a, b) => b[0].localeCompare(a[0])).map(([d, w]) => ({ date: d, weight: w / total, ...rateOf(flips(runs.find(r => r.date === d)!.main.get(m)!, base)) })) } };
 }
 const models = [...main.keys()].sort();
+// Expiry dates OpenRouter's catalog listed on the day of the run (run.ts saves the catalog next to the results).
+const catalogFile = path.join(ROOT, 'results', date, run, '_catalog.json');
+const expiry = new Map<string, string>();
+if (fs.existsSync(catalogFile)) for (const c of JSON.parse(fs.readFileSync(catalogFile, 'utf8')).models ?? []) if (/^\d{4}-\d{2}-\d{2}/.test(String(c.expiration_date))) expiry.set(c.id, String(c.expiration_date).slice(0, 10));
 const perModel: Record<string, any> = {};
 for (const m of models) {
   const recs = main.get(m)!;
@@ -162,7 +166,7 @@ for (const m of models) {
   const served = [...new Set(recs.map(r => r.model_served).filter(Boolean))];
   const providers = [...new Set(recs.map(r => r.provider).filter(Boolean))];
   perModel[m] = {
-    served, providers, provider_pin: pins[m]?.since && pins[m].since <= date ? pins[m] : null,
+    served, providers, provider_pin: pins[m]?.since && pins[m].since <= date ? pins[m] : null, expires: expiry.get(m) ?? null,
     requests: recs.length, errors: recs.length - ok.length, error_rate: (recs.length - ok.length) / Math.max(1, recs.length),
     error_samples: [...new Set(recs.filter(r => !r.ok).map(r => `${r.status} ${redact(String(r.error)).slice(0, 120)}`))].slice(0, 3),
     latency_p50: quantile(lat, 0.5), latency_p95: quantile(lat, 0.95),

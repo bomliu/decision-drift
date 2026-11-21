@@ -58,7 +58,7 @@ export function canonical(v: unknown): string {
 }
 export const sha256 = (s: string) => crypto.createHash('sha256').update(s).digest('hex');
 
-export interface CatalogModel { id: string; canonical_slug: string; prompt_price: number; context_length: number; }
+export interface CatalogModel { id: string; canonical_slug: string; prompt_price: number; context_length: number; expiration_date: string | null; }
 export async function fetchCatalog(): Promise<CatalogModel[]> {
   const r = await fetch(MODELS_URL);
   if (!r.ok) throw new Error(`catalog ${r.status}`);
@@ -67,7 +67,7 @@ export async function fetchCatalog(): Promise<CatalogModel[]> {
   const ids = new Set<string>(d.data.map((m: any) => m.id));
   return d.data
     .filter((m: any) => !(m.id.endsWith(':free') && ids.has(m.id.slice(0, -':free'.length))))
-    .map((m: any) => ({ id: m.id, canonical_slug: m.canonical_slug, prompt_price: Number(m.pricing?.prompt ?? 0), context_length: m.context_length }));
+    .map((m: any) => ({ id: m.id, canonical_slug: m.canonical_slug, prompt_price: Number(m.pricing?.prompt ?? 0), context_length: m.context_length, expiration_date: m.expiration_date ?? null }));
 }
 
 // Budget guard: OpenRouter reports the key's spend, all time (`usage`) and for the current UTC day (`usage_daily`).

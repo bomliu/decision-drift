@@ -410,7 +410,7 @@ for (const m of seen) {
   let everAnswered = false;
   reports.forEach((r, i) => {
     const p = r.perModel[m]; const was = i > 0 ? reports[i - 1].perModel[m] : undefined;
-    if (!p) { if (was) changeLog.push({ date: r.date, m, kind: 'listing', text: m in excluded ? `No longer tracked. ${excluded[m]}` : 'No longer listed on OpenRouter.' }); return; }
+    if (!p) { if (was) changeLog.push({ date: r.date, m, kind: 'listing', text: m in excluded ? `No longer tracked. ${excluded[m]}` : was.expires ? `No longer listed on OpenRouter. Its listing was set to expire ${shortDate(was.expires)}.` : 'No longer listed on OpenRouter.' }); return; }
     if (!answeredOn(m, r)) {
       changeLog.push({ date: r.date, m, kind: everAnswered ? 'outage' : 'listing', text: everAnswered ? `No answers this run: all ${p.requests} calls failed.` : `Listed on OpenRouter, but no provider served it: all ${p.requests} calls failed.` });
       return;
@@ -422,6 +422,7 @@ for (const m of seen) {
 for (const m of models) {
   const h = history(m);
   h.forEach(({ date, p }, i) => {
+    if (p.expires && p.expires !== h[i - 1]?.p.expires) changeLog.push({ date, m, kind: 'listing', text: `OpenRouter now lists an expiry date for this model: ${dateLong(p.expires)}.` });
     if (i === 0) return;
     if (p.provider_pin && !h[i - 1].p.provider_pin) { changeLog.push({ date, m, kind: 'serve', text: `Requests now pinned to ${p.provider_pin.name}, the maker. Earlier runs were mostly answered by other hosts, so comparisons restart here.` }); return; }
     const prev = h[i - 1].p.served.join(', '), cur = p.served.join(', ');
@@ -611,7 +612,7 @@ ${aliases.length ? `<p class="sub-list">Aliases: ${aliases.map(m => `<a href="/m
 const modelRow = (m: string) => {
   const p = latest.perModel[m]; const d = drift(m, latest); const hot = verdict(m).key === 'changed';
   const rk = rankOf.get(m); const st = p.stability;
-  return `<tr><td class="num-rank">${rk ?? ''}</td><td class="l"><a href="/models/${slug(m)}/">${esc(isAlias(m) ? m : nameOf(m))}</a><small>${esc(isAlias(m) ? 'serves ' + p.served.join(', ') : vendorName(m))}</small></td>
+  return `<tr><td class="num-rank">${rk ?? ''}</td><td class="l"><a href="/models/${slug(m)}/">${esc(isAlias(m) ? m : nameOf(m))}</a><small>${esc(isAlias(m) ? 'serves ' + p.served.join(', ') : vendorName(m))}${p.expires ? ` · listing expires ${shortDate(p.expires)}` : ''}</small></td>
 <td>${rk && st ? `<b>${st.index.toFixed(0)}</b>` : '—'}</td><td class="${hot ? 'hot' : ''}">${d?.n ? pct(d.flip_rate) : '—'}${hot ? `<small class="hot">${esc(lc(verdict(m).label))}</small>` : ''}</td><td>${pct(p.noise.flip_rate)}</td><td class="opt">${pct(p.shuffle.flip_rate)}</td><td class="opt">${pct(p.paraphrase.flip_rate)}</td>
 <td class="opt">${ms(p.latency_p50)}</td></tr>`;
 };
@@ -667,7 +668,7 @@ for (const m of models) {
   write(`models/${slug(m)}/index.html`, page({ path: `/models/${slug(m)}/`, title: m, description: `Daily drift, noise and robustness for ${m}.`, card: modelCard, body: `
 <p class="crumb"><a href="/models/">Models</a> / ${esc(isAlias(m) ? 'Aliases' : vendorName(m))}</p>
 <h1>${esc(isAlias(m) ? m : nameOf(m))}</h1>
-<p class="meta">${isAlias(m) ? `Alias. Serves ${esc(last.served.join(', '))}.` : `Snapshot ${esc(last.served.join(', '))}. ${servedLine(m, last)}`}${familyOf(m) ? ` <a href="/versions/#${famId(familyOf(m))}">Compare versions</a>.` : ''}</p>
+<p class="meta">${isAlias(m) ? `Alias. Serves ${esc(last.served.join(', '))}.` : `Snapshot ${esc(last.served.join(', '))}. ${servedLine(m, last)}`}${familyOf(m) ? ` <a href="/versions/#${famId(familyOf(m))}">Compare versions</a>.` : ''}${latest.perModel[m] && last.expires ? ` OpenRouter lists this model as expiring on ${dateLong(last.expires)}.` : ''}</p>
 <div class="stats"><div><b>${rankOf.has(m) ? `#${rankOf.get(m)} of ${ranked.length}` : '—'}</b><span>${rankOf.has(m) ? `stability, index ${last.stability.index.toFixed(0)}` : 'not ranked yet'}</span></div><div><b class="${hot ? 'hot' : ''}">${d?.n ? pct(d.flip_rate) : '—'}</b><span>recent change${hot ? `, ${esc(lc(verdict(m).label))}` : ''}</span></div><div><b>${pct(last.noise.flip_rate)}</b><span>noise</span></div><div><b>${pct(last.accuracy)}</b><span>gold accuracy</span></div></div>
 <h2>Daily runs</h2>
 <div class="days" role="img" aria-label="One square per day, each compared with the previous run">${squares}</div>
@@ -741,7 +742,7 @@ fs.copyFileSync(path.join(ROOT, 'src/og-card.png'), path.join(OUT, 'og-card.png'
 // data + status
 fs.mkdirSync(path.join(OUT, 'data'), { recursive: true });
 fs.writeFileSync(path.join(OUT, 'data/latest.json'), JSON.stringify(latest));
-fs.writeFileSync(path.join(OUT, 'data/history.json'), JSON.stringify(Object.fromEntries(models.map(m => [m, history(m).map(({ date, p }) => ({ date, served: p.served, providers: p.providers, changed_since_baseline: date === BASELINE.date ? null : p.drift_vs_compare, recent_change: p.drift_recent ?? null, changed_vs_previous: p.drift_vs_previous ?? null, changed_by_type: date === BASELINE.date ? null : p.drift_by_type ?? null, noise: p.noise, shuffle: p.shuffle, paraphrase: p.paraphrase, accuracy: p.accuracy, accuracy_ci: p.accuracy_ci, latency_p50: p.latency_p50, latency_p95: p.latency_p95, error_rate: p.error_rate }))]))));
+fs.writeFileSync(path.join(OUT, 'data/history.json'), JSON.stringify(Object.fromEntries(models.map(m => [m, history(m).map(({ date, p }) => ({ date, served: p.served, providers: p.providers, expires: p.expires ?? null, changed_since_baseline: date === BASELINE.date ? null : p.drift_vs_compare, recent_change: p.drift_recent ?? null, changed_vs_previous: p.drift_vs_previous ?? null, changed_by_type: date === BASELINE.date ? null : p.drift_by_type ?? null, noise: p.noise, shuffle: p.shuffle, paraphrase: p.paraphrase, accuracy: p.accuracy, accuracy_ci: p.accuracy_ci, latency_p50: p.latency_p50, latency_p95: p.latency_p95, error_rate: p.error_rate }))]))));
 fs.copyFileSync(path.join(ROOT, 'suite/manifest-v1.json'), path.join(OUT, 'data/manifest-v1.json'));
 fs.copyFileSync(path.join(ROOT, 'suite/core-v1.public.jsonl'), path.join(OUT, 'data/core-v1.public.jsonl'));
 write('data/index.html', page({ path: '/data/', title: 'Data', description: 'Download Decision Drift results, the public suite and the manifest.', body: `<h1>Data</h1><p class="dek">Updated daily. CC BY 4.0, credit "Decision Drift" with a link; CLINC150-derived items CC BY 3.0.</p>
