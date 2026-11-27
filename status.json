@@ -1,17 +1,18 @@
 {
  "last_run": {
-  "date": "2026-11-26",
+  "date": "2026-11-27",
   "run": "daily",
   "status": "ok",
-  "finished_at": "2026-11-26T10:31:31.410Z"
+  "finished_at": "2026-11-27T10:40:00.345Z"
  },
  "schedule": "daily at 10:17 UTC",
- "models": 39,
- "requests": 15479,
- "errors": 24,
+ "models": 40,
+ "requests": 27193,
+ "errors": 41,
  "models_with_errors": [
+  "antdigital/lingdt-decision-fast-1.0:free",
   "cloudflare/clairic"
  ],
- "run_cost_usd": 0.5620520500019276,
- "key_usage_usd": 45.48434592
+ "run_cost_usd": 1.0831039250039216,
+ "key_usage_usd": 46.791006699
 }
